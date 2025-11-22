@@ -6,6 +6,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.compost2.ui.screens.EditorScreen
 import com.example.compost2.ui.screens.HomeScreen
+import com.example.compost2.ui.screens.PlayerScreen
 import com.example.compost2.ui.screens.RecorderScreen
 import com.example.compost2.ui.screens.SettingsScreen
 
@@ -19,15 +20,28 @@ fun AppNavigation() {
         composable(Screen.Home.route) {
             HomeScreen(
                 onNavigateToRecorder = {
-                    // Переход на экран записи
                     navController.navigate(Screen.Recorder.route)
+                },
+                onNavigateToPlayer = {
+                    navController.navigate(Screen.Player.route)
                 }
             )
         }
 
         // Экран записи
         composable(Screen.Recorder.route) {
-            RecorderScreen()
+            RecorderScreen(
+                onNavigateToHome = {
+                    navController.popBackStack(Screen.Home.route, inclusive = false)
+                }
+            )
+        }
+
+        // Экран Плеера
+        composable(Screen.Player.route) {
+            PlayerScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
         }
 
         // Экран редактора

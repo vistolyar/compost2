@@ -5,4 +5,5 @@ sealed class Screen(val route: String) {
     object Recorder : Screen("recorder")
     object Editor : Screen("editor")
     object Settings : Screen("settings")
+    object Player : Screen("player")
 }

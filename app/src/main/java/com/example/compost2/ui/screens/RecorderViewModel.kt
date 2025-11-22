@@ -33,11 +33,14 @@ class RecorderViewModel(
     var hasRecordingSession by mutableStateOf(false)
         private set
 
+    // Режим записи: true = Диктофон, false = Рация
+    var isDictaphoneMode by mutableStateOf(true)
+        private set
+
     var currentAmplitude by mutableIntStateOf(0)
         private set
 
-    // --- НОВОЕ: Строка времени для отображения на экране ---
-    var formattedTime by mutableStateOf("00:00")
+    var formattedTime by mutableStateOf("00:00.0")
         private set
 
     var recordedFile: File? = null
@@ -46,13 +49,13 @@ class RecorderViewModel(
     private var amplitudeJob: Job? = null
     private var timerJob: Job? = null
 
-    // Переменные для подсчета времени
     private var startTime = 0L
-    private var accumulatedTime = 0L // Накопленное время до паузы
+    private var accumulatedTime = 0L
 
-    fun startCapture(context: Context) {
+    fun startCapture(context: Context, isDictaphone: Boolean) {
         if (isRecording) return
 
+        isDictaphoneMode = isDictaphone
         vibrate(context)
 
         var file = recordedFile
@@ -66,12 +69,16 @@ class RecorderViewModel(
         }
 
         isRecording = true
-
-        // Запоминаем, во сколько начали текущий кусок записи
         startTime = System.currentTimeMillis()
 
         startAmplitudePolling()
         startTimer()
+    }
+
+    // НОВАЯ ФУНКЦИЯ: Позволяет переключиться в режим диктофона уже в процессе записи
+    // (нужно, если мы начали нажатие как "Рация", но отпустили быстро)
+    fun enableDictaphoneMode() {
+        isDictaphoneMode = true
     }
 
     fun pauseCapture() {
@@ -80,7 +87,6 @@ class RecorderViewModel(
         recorder.pause()
         isRecording = false
 
-        // Добавляем текущий кусок к общему времени
         accumulatedTime += System.currentTimeMillis() - startTime
 
         stopAmplitudePolling()
@@ -92,28 +98,7 @@ class RecorderViewModel(
         stopTimer()
         recorder.stop()
         isRecording = false
-        // Сбрасываем таймер при завершении (опционально, зависит от логики перехода дальше)
-        // accumulatedTime = 0L
-        // formattedTime = "00:00"
-    }
-
-    private fun vibrate(context: Context) {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            manager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-
-        if (vibrator.hasVibrator()) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
-            } else {
-                @Suppress("DEPRECATION")
-                vibrator.vibrate(100)
-            }
-        }
+        // hasRecordingSession не сбрасываем, так как файл сохранен
     }
 
     private fun startAmplitudePolling() {
@@ -121,7 +106,7 @@ class RecorderViewModel(
         amplitudeJob = viewModelScope.launch {
             while (isActive) {
                 currentAmplitude = recorder.getAmplitude()
-                delay(100)
+                delay(50)
             }
         }
     }
@@ -131,15 +116,13 @@ class RecorderViewModel(
         currentAmplitude = 0
     }
 
-    // --- НОВОЕ: Логика таймера ---
     private fun startTimer() {
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (isActive) {
-                // Текущая длительность = (что было раньше) + (сколько прошло с нажатия кнопки сейчас)
                 val totalDurationMillis = accumulatedTime + (System.currentTimeMillis() - startTime)
                 formattedTime = formatTime(totalDurationMillis)
-                delay(100) // Обновляем каждые 0.1 сек
+                delay(50)
             }
         }
     }
@@ -149,9 +132,21 @@ class RecorderViewModel(
     }
 
     private fun formatTime(millis: Long): String {
+        val tenths = (millis / 100) % 10
         val seconds = (millis / 1000) % 60
         val minutes = (millis / 1000) / 60
-        return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+        return String.format(Locale.getDefault(), "%02d:%02d.%d", minutes, seconds, tenths)
+    }
+
+    private fun vibrate(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val manager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            manager.defaultVibrator.vibrate(VibrationEffect.createOneShot(50, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            vibrator.vibrate(50)
+        }
     }
 
     companion object {
