@@ -1,17 +1,18 @@
 package com.example.compost2.domain
 
 enum class RecordingStatus {
-    PENDING,    // В обработке (сигнализирует о процессе)
-    DRAFT,      // Черновик (желтый)
-    PUBLISHED,  // Опубликовано (зеленый)
-    SAVED       // Сохранено локально, готово к отправке
+    SAVED,      // 1. Просто запись (Синяя)
+    PROCESSING, // 2. В обработке (Синяя, как ты просил)
+    READY,      // 3. Готово к публикации (Желтая)
+    PUBLISHED   // 4. Опубликовано (Зеленая)
 }
 
 data class RecordingItem(
     val id: String,
-    val name: String,              // Название (например, дата 172422112025)
+    val name: String,
     val status: RecordingStatus,
-    val date: String,
-    val filePath: String? = null,  // Путь к файлу на устройстве (нужен для плеера)
-    val progress: Float? = null    // Для статуса Pending (0.0 - 1.0)
+    val filePath: String,
+    val articleTitle: String? = null,
+    val promptName: String? = null,
+    val publicUrl: String? = null // Ссылка на статью в WP
 )

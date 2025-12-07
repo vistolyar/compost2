@@ -61,6 +61,7 @@ class RecorderViewModel(
         vibrate(context)
 
         var file = recordedFile
+        // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если файла нет или сессия была сброшена - создаем новый
         if (file == null) {
             file = File(context.cacheDir, "temp_recording.m4a")
             recordedFile = file
@@ -95,37 +96,37 @@ class RecorderViewModel(
     }
 
     fun finalizeRecording() {
-        // 1. Сначала считаем точное время! До того, как остановим запись.
+        // 1. Считаем время
         val endTime = System.currentTimeMillis()
         val currentSegmentDuration = if (isRecording) (endTime - segmentStartTime) else 0L
         val totalDuration = accumulatedTime + currentSegmentDuration
 
-        // 2. Теперь останавливаем процессы
+        // 2. Останавливаем
         stopAmplitudePolling()
         stopTimer()
         recorder.stop()
         isRecording = false
+        hasRecordingSession = false // Сбрасываем сессию
 
-        // 3. Переименовываем файл
+        // 3. Переименовываем и ОБНУЛЯЕМ ссылку
         val file = recordedFile
         if (file != null && file.exists()) {
-
-            // Формируем дату начала
             val dateFormat = SimpleDateFormat("yyyy-MM-dd-HH-mm", Locale.getDefault())
             val datePart = dateFormat.format(Date(sessionStartTimeMillis))
-
-            // Формируем длительность (теперь она не 0!)
             val durationPart = formatDurationForFileName(totalDuration)
 
             val newName = "${datePart}_${durationPart}.m4a"
             val newFile = File(file.parent, newName)
 
             file.renameTo(newFile)
-            recordedFile = newFile
         }
+
+        // ВАЖНО: Обнуляем файл, чтобы следующая запись началась с чистого листа
+        recordedFile = null
+        accumulatedTime = 0L
+        formattedTime = "00:00.0"
     }
 
-    // Формат ЧЧ-ММ-СС для имени файла
     private fun formatDurationForFileName(millis: Long): String {
         val seconds = (millis / 1000) % 60
         val minutes = (millis / 1000 / 60) % 60

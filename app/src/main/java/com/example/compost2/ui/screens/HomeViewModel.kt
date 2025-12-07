@@ -17,54 +17,126 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     var recordings by mutableStateOf<List<RecordingItem>>(emptyList())
         private set
 
+    // Состояние для диалога удаления
+    var itemToDelete by mutableStateOf<RecordingItem?>(null)
+        private set
+
+    // Состояние обновления (для спиннера)
+    var isRefreshing by mutableStateOf(false)
+        private set
+
     fun loadRecordings() {
         val dir = context.cacheDir
         val files = dir.listFiles { file ->
-            file.extension == "m4a" && file.name != "temp_recording.m4a" // Игнорируем временный файл, если запись сорвалась
+            file.extension == "m4a" && file.name != "temp_recording.m4a"
         } ?: emptyArray()
 
         val sortedFiles = files.sortedByDescending { it.lastModified() }
 
+        // Если список пустой или мы делаем принудительное обновление - пересоздаем список
+        // (Упрощенная логика: всегда перезагружаем с диска)
+        val currentItemsMap = recordings.associateBy { it.id }
+
         recordings = sortedFiles.map { file ->
-            RecordingItem(
-                id = file.name,
-                name = parseFileNameToDisplay(file.name), // Красивое форматирование
-                status = RecordingStatus.SAVED,
-                date = "Local", // Дату мы уже вшили в имя, здесь можно упростить
-                filePath = file.absolutePath
-            )
+            // Если такой файл уже был в списке (например, мы меняли ему статус),
+            // пытаемся сохранить старый объект, чтобы не сбросить статус на SAVED
+            val existingItem = currentItemsMap[file.name]
+
+            if (existingItem != null) {
+                existingItem
+            } else {
+                RecordingItem(
+                    id = file.name,
+                    name = parseFileNameToDisplay(file.name),
+                    status = RecordingStatus.SAVED,
+                    filePath = file.absolutePath
+                )
+            }
         }
     }
 
-    // Функция превращает: "2025-12-07-17-41_00-00-39.m4a"
-    // В строку: "2025.12.07 17:41 00:00:39"
+    // Метод для Swipe-to-Refresh
+    fun refresh() {
+        isRefreshing = true
+        loadRecordings()
+        isRefreshing = false
+    }
+
+    // --- ЛОГИКА УДАЛЕНИЯ ---
+
+    fun requestDelete(item: RecordingItem) {
+        itemToDelete = item
+    }
+
+    fun confirmDelete() {
+        itemToDelete?.let { item ->
+            val file = File(item.filePath)
+            if (file.exists()) {
+                file.delete()
+            }
+            recordings = recordings.filter { it.id != item.id }
+        }
+        itemToDelete = null
+    }
+
+    fun cancelDelete() {
+        itemToDelete = null
+    }
+
+    // --- СИМУЛЯЦИЯ ---
+
+    fun sendToSTT(item: RecordingItem) {
+        updateItemStatus(item, RecordingStatus.PROCESSING)
+    }
+
+    fun cancelProcessing(item: RecordingItem) {
+        updateItemStatus(item, RecordingStatus.SAVED)
+    }
+
+    fun mockFinishProcessing(item: RecordingItem) {
+        val newItem = item.copy(
+            status = RecordingStatus.READY,
+            articleTitle = "How to optimize Android apps using AI",
+            promptName = "SEO Copywriter"
+        )
+        updateItemInList(newItem)
+    }
+
+    fun mockPublish(item: RecordingItem) {
+        val newItem = item.copy(
+            status = RecordingStatus.PUBLISHED,
+            publicUrl = "https://mysite.com/blog/android-ai-optimization-guide-2025"
+        )
+        updateItemInList(newItem)
+    }
+
+    private fun updateItemStatus(item: RecordingItem, newStatus: RecordingStatus) {
+        val newItem = item.copy(status = newStatus)
+        updateItemInList(newItem)
+    }
+
+    private fun updateItemInList(newItem: RecordingItem) {
+        recordings = recordings.map {
+            if (it.id == newItem.id) newItem else it
+        }
+    }
+
     private fun parseFileNameToDisplay(fileName: String): String {
         try {
-            val nameWithoutExt = fileName.substringBeforeLast(".") // Убираем .m4a
-
-            // Если файл старого формата (просто цифры), возвращаем как есть
+            val nameWithoutExt = fileName.substringBeforeLast(".")
             if (!nameWithoutExt.contains("-")) return nameWithoutExt
-
-            // Разбиваем на ДатуВремя и Длительность по символу "_"
             val parts = nameWithoutExt.split("_")
             if (parts.size < 2) return nameWithoutExt
 
-            val dateTimePart = parts[0] // 2025-12-07-17-41
-            val durationPart = parts[1] // 00-00-39
+            val dateTimePart = parts[0]
+            val durationPart = parts[1]
 
-            // Форматируем Дату и Время
-            // Исходник: yyyy-MM-dd-HH-mm
             val dateComponents = dateTimePart.split("-")
-            // dateComponents[0]=yyyy, [1]=MM, [2]=dd, [3]=HH, [4]=mm
             val prettyDate = "${dateComponents[0]}.${dateComponents[1]}.${dateComponents[2]} ${dateComponents[3]}:${dateComponents[4]}"
-
-            // Форматируем Длительность
-            // Исходник: HH-mm-ss -> HH:mm:ss
             val prettyDuration = durationPart.replace("-", ":")
 
             return "$prettyDate   $prettyDuration"
         } catch (e: Exception) {
-            // Если что-то пошло не так (странное имя файла), возвращаем оригинал
             return fileName
         }
     }
