@@ -29,37 +29,31 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import java.util.Locale
+import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlin.random.Random
 
 @Composable
 fun PlayerScreen(
+    fileName: String,
     onNavigateBack: () -> Unit
 ) {
-    // --- Состояния (Dummy Data) ---
-    var isPlaying by remember { mutableStateOf(false) }
-    var speed by remember { mutableFloatStateOf(1f) } // 1x, 2x, 3x
+    val context = LocalContext.current
+    val viewModel: PlayerViewModel = viewModel(factory = PlayerViewModel.provideFactory(context))
 
-    // Эмуляция длинной записи (например, 20 минут 21 секунда)
-    val totalDurationMillis = 20 * 60 * 1000L + 21 * 1000L
-
-    // Текущий прогресс (0.0 - 1.0)
-    var sliderPosition by remember { mutableFloatStateOf(0.0f) }
+    LaunchedEffect(fileName) {
+        viewModel.loadFile(fileName)
+    }
 
     Column(
         modifier = Modifier
@@ -82,34 +76,34 @@ fun PlayerScreen(
             Spacer(modifier = Modifier.width(8.dp))
             Column {
                 Text(
-                    text = "Voice record: 172422112025",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground
+                    text = "Voice record",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Status: Saved",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF4CAF50) // Material Green
+                    text = viewModel.fileName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // --- 2. ОСЦИЛЛОГРАММА (Scrolling Waveform) ---
+        // --- 2. ОСЦИЛЛОГРАММА ---
         val waveColor = MaterialTheme.colorScheme.primary
 
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(200.dp)
-                .clipToBounds() // Обрезаем всё, что вылазит за границы экрана
+                .clipToBounds()
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(16.dp)),
             contentAlignment = Alignment.Center
         ) {
             ScrollableWaveform(
-                progress = sliderPosition,
-                totalDurationMillis = totalDurationMillis,
+                progress = viewModel.sliderPosition,
+                totalDurationMillis = if (viewModel.totalDurationMillis > 0) viewModel.totalDurationMillis else 1000L,
                 color = waveColor
             )
         }
@@ -119,10 +113,9 @@ fun PlayerScreen(
         // --- 3. Слайдер и Тайм-коды ---
         Column(modifier = Modifier.fillMaxWidth()) {
 
-            // Слайдер (с кружком-маркером)
             Slider(
-                value = sliderPosition,
-                onValueChange = { sliderPosition = it },
+                value = viewModel.sliderPosition,
+                onValueChange = { viewModel.seekTo(it) },
                 colors = SliderDefaults.colors(
                     thumbColor = MaterialTheme.colorScheme.primary,
                     activeTrackColor = MaterialTheme.colorScheme.primary,
@@ -131,22 +124,17 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            // Тайм-коды под слайдером
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Текущее время (слева)
-                val currentMillis = (totalDurationMillis * sliderPosition).toLong()
                 Text(
-                    text = formatPlayerTime(currentMillis),
+                    text = viewModel.formatTime(viewModel.currentPositionMillis),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
-
-                // Общее время (справа)
                 Text(
-                    text = formatPlayerTime(totalDurationMillis),
+                    text = viewModel.formatTime(viewModel.totalDurationMillis),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onBackground
                 )
@@ -163,41 +151,35 @@ fun PlayerScreen(
         ) {
             // Кнопка скорости
             OutlinedButton(
-                onClick = {
-                    speed = when (speed) {
-                        1f -> 2f
-                        2f -> 3f
-                        else -> 1f
-                    }
-                },
+                onClick = { viewModel.changeSpeed() },
                 shape = CircleShape,
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.onBackground
                 )
             ) {
-                Text("${speed.toInt()}x")
+                Text("${viewModel.currentSpeed}x")
             }
 
-            // Play / Pause (Большая кнопка)
+            // Play / Pause
             IconButton(
-                onClick = { isPlaying = !isPlaying },
+                onClick = { viewModel.togglePlayPause() },
                 modifier = Modifier
                     .size(80.dp)
                     .background(MaterialTheme.colorScheme.primary, CircleShape)
             ) {
                 Icon(
-                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    imageVector = if (viewModel.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = "Play/Pause",
                     tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(48.dp)
                 )
             }
 
-            // Кнопка Resend
-            IconButton(onClick = { /* Resend Logic */ }) {
+            // Кнопка Replay (ПЕРЕМОТКА В НАЧАЛО)
+            IconButton(onClick = { viewModel.seekTo(0f) }) {
                 Icon(
                     Icons.Default.Refresh,
-                    contentDescription = "Resend",
+                    contentDescription = "Replay",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -207,17 +189,13 @@ fun PlayerScreen(
     }
 }
 
-// --- Хелперы ---
-
 @Composable
 fun ScrollableWaveform(
     progress: Float,
     totalDurationMillis: Long,
     color: Color
 ) {
-    // Окно видимости = 5 минут (300 000 мс)
     val visibleWindowMillis = 5 * 60 * 1000L
-
     val barsCount = (totalDurationMillis / 500).toInt().coerceAtLeast(10)
     val bars = remember(totalDurationMillis) { List(barsCount) { Random.nextFloat() } }
 
@@ -257,11 +235,4 @@ fun ScrollableWaveform(
             }
         }
     }
-}
-
-fun formatPlayerTime(millis: Long): String {
-    val totalSeconds = millis / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
 }

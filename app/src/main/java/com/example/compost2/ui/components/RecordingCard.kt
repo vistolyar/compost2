@@ -13,11 +13,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
@@ -35,10 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.compost2.domain.RecordingItem
 import com.example.compost2.domain.RecordingStatus
 
@@ -54,39 +52,50 @@ fun RecordingCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .clickable { onClick() }, // Тап по карточке
+            .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
 
-            // --- Заголовок и Иконка ---
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusIcon(item.status)
                 Spacer(modifier = Modifier.width(12.dp))
+
                 Column {
+                    val labelText = if (item.status == RecordingStatus.PENDING || item.status == RecordingStatus.SAVED)
+                        "Voice record"
+                    else
+                        "Article"
+
                     Text(
-                        text = if (item.status == RecordingStatus.PENDING) "Voice record: ${item.name}" else "Article: ${item.name}",
+                        text = labelText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Text(
+                        text = item.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
+
                     Text(
                         text = "Status: ${getStatusText(item.status)}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = Color.Gray
+                        color = Color.Gray,
+                        modifier = Modifier.padding(top = 2.dp)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // --- Контент в зависимости от статуса ---
             when (item.status) {
                 RecordingStatus.PENDING -> {
-                    // Показываем прогресс бар [cite: 14]
                     if (item.progress != null) {
                         LinearProgressIndicator(
-                            progress = { item.progress },
+                            progress = { item.progress ?: 0f },
                             modifier = Modifier.fillMaxWidth().height(4.dp),
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -97,7 +106,6 @@ fun RecordingCard(
                         Spacer(modifier = Modifier.height(8.dp))
                     }
 
-                    // Кнопки Cancel / Resend [cite: 15-16]
                     Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(
                             onClick = onCancelClick,
@@ -105,13 +113,10 @@ fun RecordingCard(
                         ) {
                             Text("Cancel")
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        // Resend покажем если нужно (здесь пока для примера)
                     }
                 }
 
                 RecordingStatus.DRAFT -> {
-                    // Кнопка Edit/Publish [cite: 32]
                     Button(
                         onClick = onEditClick,
                         modifier = Modifier.fillMaxWidth(),
@@ -124,14 +129,25 @@ fun RecordingCard(
                 }
 
                 RecordingStatus.PUBLISHED -> {
-                    // Кнопка View/Edit [cite: 38]
                     OutlinedButton(
                         onClick = onEditClick,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50)) // Зеленая галочка
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF4CAF50))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Published (View)", color = Color(0xFF4CAF50))
+                    }
+                }
+
+                RecordingStatus.SAVED -> {
+                    Button(
+                        onClick = onResendClick,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Process / Resend")
                     }
                 }
             }
@@ -143,14 +159,16 @@ fun RecordingCard(
 fun StatusIcon(status: RecordingStatus) {
     val color = when (status) {
         RecordingStatus.PENDING -> Color.Gray
-        RecordingStatus.DRAFT -> Color(0xFFFFC107) // Желтый [cite: 30]
-        RecordingStatus.PUBLISHED -> Color(0xFF4CAF50) // Зеленый [cite: 33]
+        RecordingStatus.DRAFT -> Color(0xFFFFC107)
+        RecordingStatus.PUBLISHED -> Color(0xFF4CAF50)
+        RecordingStatus.SAVED -> Color(0xFF2196F3)
     }
 
     val icon = when (status) {
         RecordingStatus.PENDING -> Icons.Default.Schedule
         RecordingStatus.DRAFT -> Icons.Default.Circle
         RecordingStatus.PUBLISHED -> Icons.Default.CheckCircle
+        RecordingStatus.SAVED -> Icons.Default.Mic
     }
 
     Box(
@@ -173,5 +191,6 @@ fun getStatusText(status: RecordingStatus): String {
         RecordingStatus.PENDING -> "Pending..."
         RecordingStatus.DRAFT -> "Draft"
         RecordingStatus.PUBLISHED -> "Published"
+        RecordingStatus.SAVED -> "Saved"
     }
 }

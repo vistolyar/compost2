@@ -1,0 +1,16 @@
+./app/src/main/java/com/example/compost2/ui/MainActivity.kt
+./app/src/main/java/com/example/compost2/ui/navigation/AppNavigation.kt
+./app/src/main/java/com/example/compost2/ui/navigation/Screen.kt
+./app/src/main/java/com/example/compost2/ui/screens/RecorderViewModel.kt
+./app/src/main/java/com/example/compost2/ui/screens/PlayerScreen.kt
+./app/src/main/java/com/example/compost2/ui/screens/EditorScreen.kt
+./app/src/main/java/com/example/compost2/ui/screens/SettingsScreen.kt
+./app/src/main/java/com/example/compost2/ui/screens/RecorderScreen.kt
+./app/src/main/java/com/example/compost2/ui/screens/HomeScreen.kt
+./app/src/main/java/com/example/compost2/ui/components/RecordingCard.kt
+./app/src/main/java/com/example/compost2/ui/theme/Color.kt
+./app/src/main/java/com/example/compost2/ui/theme/Theme.kt
+./app/src/main/java/com/example/compost2/ui/theme/Type.kt
+./app/src/main/java/com/example/compost2/data/AndroidAudioRecorder.kt
+./app/src/main/java/com/example/compost2/domain/AudioRecorder.kt
+./app/src/main/java/com/example/compost2/domain/Models.kt

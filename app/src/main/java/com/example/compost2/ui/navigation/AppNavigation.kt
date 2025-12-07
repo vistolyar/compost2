@@ -1,9 +1,11 @@
 package com.example.compost2.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.compost2.ui.screens.EditorScreen
 import com.example.compost2.ui.screens.HomeScreen
 import com.example.compost2.ui.screens.PlayerScreen
@@ -22,8 +24,9 @@ fun AppNavigation() {
                 onNavigateToRecorder = {
                     navController.navigate(Screen.Recorder.route)
                 },
-                onNavigateToPlayer = {
-                    navController.navigate(Screen.Player.route)
+                onNavigateToPlayer = { fileName ->
+                    // Передаем имя файла в плеер
+                    navController.navigate(Screen.Player.createRoute(fileName))
                 }
             )
         }
@@ -37,9 +40,15 @@ fun AppNavigation() {
             )
         }
 
-        // Экран Плеера
-        composable(Screen.Player.route) {
+        // Экран Плеера (теперь принимает аргумент)
+        composable(
+            route = Screen.Player.route,
+            arguments = listOf(navArgument("fileName") { type = NavType.StringType })
+        ) { backStackEntry ->
+            // Достаем имя файла из аргументов
+            val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
             PlayerScreen(
+                fileName = fileName,
                 onNavigateBack = { navController.popBackStack() }
             )
         }

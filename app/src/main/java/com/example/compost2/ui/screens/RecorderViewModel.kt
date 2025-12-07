@@ -21,6 +21,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 class RecorderViewModel(
@@ -33,7 +35,6 @@ class RecorderViewModel(
     var hasRecordingSession by mutableStateOf(false)
         private set
 
-    // Режим записи: true = Диктофон, false = Рация
     var isDictaphoneMode by mutableStateOf(true)
         private set
 
@@ -49,7 +50,8 @@ class RecorderViewModel(
     private var amplitudeJob: Job? = null
     private var timerJob: Job? = null
 
-    private var startTime = 0L
+    private var sessionStartTimeMillis = 0L
+    private var segmentStartTime = 0L
     private var accumulatedTime = 0L
 
     fun startCapture(context: Context, isDictaphone: Boolean) {
@@ -60,23 +62,22 @@ class RecorderViewModel(
 
         var file = recordedFile
         if (file == null) {
-            file = File(context.cacheDir, "voice_draft.mp4")
+            file = File(context.cacheDir, "temp_recording.m4a")
             recordedFile = file
             recorder.start(file)
             hasRecordingSession = true
+            sessionStartTimeMillis = System.currentTimeMillis()
         } else {
             recorder.resume()
         }
 
         isRecording = true
-        startTime = System.currentTimeMillis()
+        segmentStartTime = System.currentTimeMillis()
 
         startAmplitudePolling()
         startTimer()
     }
 
-    // НОВАЯ ФУНКЦИЯ: Позволяет переключиться в режим диктофона уже в процессе записи
-    // (нужно, если мы начали нажатие как "Рация", но отпустили быстро)
     fun enableDictaphoneMode() {
         isDictaphoneMode = true
     }
@@ -87,25 +88,63 @@ class RecorderViewModel(
         recorder.pause()
         isRecording = false
 
-        accumulatedTime += System.currentTimeMillis() - startTime
+        accumulatedTime += System.currentTimeMillis() - segmentStartTime
 
         stopAmplitudePolling()
         stopTimer()
     }
 
     fun finalizeRecording() {
+        // 1. Сначала считаем точное время! До того, как остановим запись.
+        val endTime = System.currentTimeMillis()
+        val currentSegmentDuration = if (isRecording) (endTime - segmentStartTime) else 0L
+        val totalDuration = accumulatedTime + currentSegmentDuration
+
+        // 2. Теперь останавливаем процессы
         stopAmplitudePolling()
         stopTimer()
         recorder.stop()
         isRecording = false
-        // hasRecordingSession не сбрасываем, так как файл сохранен
+
+        // 3. Переименовываем файл
+        val file = recordedFile
+        if (file != null && file.exists()) {
+
+            // Формируем дату начала
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd-HH-mm", Locale.getDefault())
+            val datePart = dateFormat.format(Date(sessionStartTimeMillis))
+
+            // Формируем длительность (теперь она не 0!)
+            val durationPart = formatDurationForFileName(totalDuration)
+
+            val newName = "${datePart}_${durationPart}.m4a"
+            val newFile = File(file.parent, newName)
+
+            file.renameTo(newFile)
+            recordedFile = newFile
+        }
+    }
+
+    // Формат ЧЧ-ММ-СС для имени файла
+    private fun formatDurationForFileName(millis: Long): String {
+        val seconds = (millis / 1000) % 60
+        val minutes = (millis / 1000 / 60) % 60
+        val hours = (millis / 1000 / 3600)
+        return String.format(Locale.getDefault(), "%02d-%02d-%02d", hours, minutes, seconds)
+    }
+
+    private fun formatTime(millis: Long): String {
+        val tenths = (millis / 100) % 10
+        val seconds = (millis / 1000) % 60
+        val minutes = (millis / 1000) / 60
+        return String.format(Locale.getDefault(), "%02d:%02d.%d", minutes, seconds, tenths)
     }
 
     private fun startAmplitudePolling() {
         amplitudeJob?.cancel()
         amplitudeJob = viewModelScope.launch {
             while (isActive) {
-                currentAmplitude = recorder.getAmplitude()
+                currentAmplitude = try { recorder.getAmplitude() } catch (e: Exception) { 0 }
                 delay(50)
             }
         }
@@ -120,7 +159,8 @@ class RecorderViewModel(
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
             while (isActive) {
-                val totalDurationMillis = accumulatedTime + (System.currentTimeMillis() - startTime)
+                val currentSegmentDuration = if (isRecording) System.currentTimeMillis() - segmentStartTime else 0
+                val totalDurationMillis = accumulatedTime + currentSegmentDuration
                 formattedTime = formatTime(totalDurationMillis)
                 delay(50)
             }
@@ -129,13 +169,6 @@ class RecorderViewModel(
 
     private fun stopTimer() {
         timerJob?.cancel()
-    }
-
-    private fun formatTime(millis: Long): String {
-        val tenths = (millis / 100) % 10
-        val seconds = (millis / 1000) % 60
-        val minutes = (millis / 1000) / 60
-        return String.format(Locale.getDefault(), "%02d:%02d.%d", minutes, seconds, tenths)
     }
 
     private fun vibrate(context: Context) {
