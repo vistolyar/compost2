@@ -1,6 +1,8 @@
 package com.example.compost2.ui.screens
 
 import android.content.Context
+import android.util.Base64
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -10,43 +12,46 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.compost2.data.network.ArticleRequest
+import com.example.compost2.data.network.RetrofitClient
 import com.example.compost2.domain.RecordingItem
 import com.example.compost2.domain.RecordingStatus
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.Date
 
 class SendToSTTViewModel(private val context: Context) : ViewModel() {
+
+    // Убедись, что твой ключ тут остался!
+    private val TEMP_OPENAI_KEY = "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"
 
     var recordingItem by mutableStateOf<RecordingItem?>(null)
         private set
 
-    // Список промптов (пока заглушка, позже будем брать из WP/Settings) [cite: 190]
     var prompts by mutableStateOf(listOf(
-        "Default: Просто транскрибация",
-        "SEO Copywriter: Пиши как эксперт",
-        "Summary: Краткое содержание",
-        "LinkedIn Post: Деловой стиль"
+        "Default: Just transcribe text",
+        "SEO Copywriter: Create a structured blog post with headers",
+        "LinkedIn Expert: Viral business post style",
+        "Summary: Bullet points only"
     ))
         private set
 
     var selectedPrompt by mutableStateOf(prompts[0])
 
-    // Состояния процесса [cite: 192]
     var isUploading by mutableStateOf(false)
     var uploadProgress by mutableFloatStateOf(0f)
-
-    // Флаг, что процесс завершен (чтобы UI знал, что пора закрываться)
     var isFinished by mutableStateOf(false)
+
+    var resultTitle: String = ""
+    var resultBody: String = ""
 
     private var uploadJob: Job? = null
 
     fun loadRecording(fileName: String) {
         val file = File(context.cacheDir, fileName)
         if (file.exists()) {
-            // Создаем временный объект для отображения
             recordingItem = RecordingItem(
                 id = file.name,
                 name = parseFileNameToDisplay(file.name),
@@ -61,19 +66,50 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
     }
 
     fun startProcessing() {
+        val item = recordingItem ?: return
         if (isUploading) return
 
         isUploading = true
-        uploadProgress = 0f
+        uploadProgress = 0.1f
 
-        // Симуляция загрузки и обработки (5 секунд)
         uploadJob = viewModelScope.launch {
-            while (uploadProgress < 1f) {
-                delay(100)
-                uploadProgress += 0.02f // +2% каждые 100мс
+            try {
+                // Мы убрали блок PING - он больше не нужен
+
+                val file = File(item.filePath)
+
+                // 1. Конвертируем в Base64
+                val base64Audio = withContext(Dispatchers.IO) {
+                    val bytes = file.readBytes()
+                    Base64.encodeToString(bytes, Base64.NO_WRAP)
+                }
+
+                uploadProgress = 0.3f
+
+                // 2. Создаем запрос
+                val request = ArticleRequest(
+                    audioBase64 = base64Audio,
+                    prompt = selectedPrompt,
+                    openaiKey = TEMP_OPENAI_KEY
+                )
+
+                // 3. Отправляем
+                val response = RetrofitClient.api.uploadAudio(request)
+
+                uploadProgress = 0.9f
+
+                resultTitle = response.title
+                resultBody = response.content
+
+                uploadProgress = 1.0f
+                isFinished = true
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                isUploading = false
+                uploadProgress = 0f
             }
-            isFinished = true
-            isUploading = false
         }
     }
 
@@ -83,21 +119,17 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
         uploadProgress = 0f
     }
 
-    // Хелпер для имени файла (дубликат логики, можно вынести в Utils, но пока так)
     private fun parseFileNameToDisplay(fileName: String): String {
-        try {
+        return try {
             val nameWithoutExt = fileName.substringBeforeLast(".")
             if (!nameWithoutExt.contains("-")) return nameWithoutExt
             val parts = nameWithoutExt.split("_")
-            if (parts.size < 2) return nameWithoutExt
             val dateTimePart = parts[0]
             val durationPart = parts[1]
             val dateComponents = dateTimePart.split("-")
-            val prettyDate = "${dateComponents[0]}.${dateComponents[1]}.${dateComponents[2]} ${dateComponents[3]}:${dateComponents[4]}"
-            val prettyDuration = durationPart.replace("-", ":")
-            return "$prettyDate   $prettyDuration"
+            "${dateComponents[0]}.${dateComponents[1]}.${dateComponents[2]} ${dateComponents[3]}:${dateComponents[4]}   ${durationPart.replace("-", ":")}"
         } catch (e: Exception) {
-            return fileName
+            fileName
         }
     }
 

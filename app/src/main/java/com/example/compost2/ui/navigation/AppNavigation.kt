@@ -16,6 +16,7 @@ import com.example.compost2.ui.screens.PromptSettingsScreen
 import com.example.compost2.ui.screens.PublicationScreen
 import com.example.compost2.ui.screens.RecorderScreen
 import com.example.compost2.ui.screens.SendToSTTScreen
+import com.example.compost2.ui.screens.SendToSTTViewModel
 import com.example.compost2.ui.screens.SettingsScreen
 
 @Composable
@@ -23,10 +24,12 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val context = LocalContext.current
 
+    // Общая ViewModel (Мозг приложения)
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.provideFactory(context))
 
     NavHost(navController = navController, startDestination = Screen.Home.route) {
 
+        // --- ГЛАВНЫЙ ЭКРАН ---
         composable(Screen.Home.route) {
             HomeScreen(
                 viewModel = homeViewModel,
@@ -40,7 +43,8 @@ fun AppNavigation() {
                     navController.navigate(Screen.SendToSTT.createRoute(fileName))
                 },
                 onNavigateToPublish = { fileName ->
-                    navController.navigate(Screen.Publication.createRoute(fileName))
+                    // Переходим в Редактор, чтобы увидеть текст
+                    navController.navigate(Screen.Editor.createRoute(fileName))
                 },
                 onNavigateToPrompts = {
                     navController.navigate("prompt_settings")
@@ -48,6 +52,7 @@ fun AppNavigation() {
             )
         }
 
+        // --- ЗАПИСЬ ---
         composable(Screen.Recorder.route) {
             RecorderScreen(
                 onNavigateToHome = {
@@ -56,6 +61,7 @@ fun AppNavigation() {
             )
         }
 
+        // --- ПЛЕЕР ---
         composable(
             route = Screen.Player.route,
             arguments = listOf(navArgument("fileName") { type = NavType.StringType })
@@ -70,29 +76,65 @@ fun AppNavigation() {
             )
         }
 
+        // --- ОТПРАВКА В AI ---
         composable(
             route = Screen.SendToSTT.route,
             arguments = listOf(navArgument("fileName") { type = NavType.StringType })
         ) { backStackEntry ->
             val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
 
+            // Используем отдельную VM для логики отправки
+            val sendToSTTViewModel: SendToSTTViewModel = viewModel(factory = SendToSTTViewModel.provideFactory(context))
+
             SendToSTTScreen(
+                viewModel = sendToSTTViewModel,
                 fileName = fileName,
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToPlayer = { file ->
                     navController.navigate(Screen.Player.createRoute(file))
                 },
                 onProcessStarted = {
+                    // Успех! Забираем данные и обновляем общий список
                     val item = homeViewModel.recordings.find { it.id == fileName }
                     if (item != null) {
-                        homeViewModel.sendToSTT(item)
+                        val title = sendToSTTViewModel.resultTitle
+                        val content = sendToSTTViewModel.resultBody
+                        homeViewModel.onAiResultReceived(item, title, content)
                     }
-                    // ИСПРАВЛЕНИЕ: Возвращаемся сразу на Home, удаляя Player из истории
+                    // Возвращаемся на Главный
                     navController.popBackStack(Screen.Home.route, inclusive = false)
                 }
             )
         }
 
+        // --- РЕДАКТОР ---
+        composable(
+            route = Screen.Editor.route,
+            arguments = listOf(navArgument("fileName") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
+
+            // 1. Ищем запись с текстом в памяти
+            val item = homeViewModel.recordings.find { it.id == fileName }
+
+            // 2. Передаем её в экран
+            EditorScreen(
+                item = item,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToPublish = {
+                    navController.navigate(Screen.Publication.createRoute(fileName))
+                },
+                onRecreate = {
+                    navController.navigate(Screen.SendToSTT.createRoute(fileName))
+                },
+                // ВАЖНО: Передаем функцию сохранения данных обратно в ViewModel
+                onUpdateContent = { title, content ->
+                    homeViewModel.updateArticleData(fileName, title, content)
+                }
+            )
+        }
+
+        // --- ПУБЛИКАЦИЯ ---
         composable(
             route = Screen.Publication.route,
             arguments = listOf(navArgument("fileName") { type = NavType.StringType })
@@ -107,7 +149,6 @@ fun AppNavigation() {
                     if (item != null) {
                         homeViewModel.mockPublish(item)
                     }
-                    // При публикации тоже логично уходить сразу на Home
                     navController.popBackStack(Screen.Home.route, inclusive = false)
                 },
                 onDeleted = {
@@ -121,18 +162,13 @@ fun AppNavigation() {
             )
         }
 
+        // --- НАСТРОЙКИ ---
         composable("prompt_settings") {
             PromptSettingsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        composable(Screen.Editor.route) {
-            EditorScreen()
-        }
-
-        composable(Screen.Settings.route) {
-            SettingsScreen()
-        }
+        composable(Screen.Settings.route) { SettingsScreen() }
     }
 }

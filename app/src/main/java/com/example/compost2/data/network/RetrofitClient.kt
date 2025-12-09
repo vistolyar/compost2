@@ -8,21 +8,31 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
-    // Пока нет реального сервера, ставим любой адрес (потом заменим на Vercel URL)
-    private const val BASE_URL = "https://example.com/"
+    // Твоя ссылка (слэш в конце!)
+    private const val BASE_URL = "https://compost-backend.vercel.app/"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.BODY // Логируем всё, что летает по сети (для отладки)
+        level = HttpLoggingInterceptor.Level.BODY
     }
 
     private val okHttpClient = OkHttpClient.Builder()
+        // --- 1. ПЕРЕХВАТЧИК ЗАГОЛОВКОВ ---
+        .addInterceptor { chain ->
+            val original = chain.request()
+            val request = original.newBuilder()
+                // Самый стандартный User-Agent, который пропускают все
+                .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                .method(original.method, original.body)
+                .build()
+            chain.proceed(request)
+        }
+        // ---------------------------------
         .addInterceptor(loggingInterceptor)
-        .connectTimeout(60, TimeUnit.SECONDS) // Даем ИИ время на подумать (1 минута)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(120, TimeUnit.SECONDS)
+        .readTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(120, TimeUnit.SECONDS)
         .build()
 
-    // Ленивая инициализация API (создается только при первом обращении)
     val api: CompostApi by lazy {
         Retrofit.Builder()
             .baseUrl(BASE_URL)

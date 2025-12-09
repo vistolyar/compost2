@@ -71,11 +71,12 @@ fun HomeScreen(
     onNavigateToPlayer: (String) -> Unit,
     onNavigateToSendSTT: (String) -> Unit,
     onNavigateToPublish: (String) -> Unit,
-    onNavigateToPrompts: () -> Unit // НОВЫЙ ПАРАМЕТР
+    onNavigateToPrompts: () -> Unit
 ) {
     val context = LocalContext.current
-
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Обновляем список при возврате на экран
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -94,6 +95,7 @@ fun HomeScreen(
     val sheetState = rememberModalBottomSheetState()
     val pullRefreshState = rememberPullToRefreshState()
 
+    // Логика Pull-to-Refresh
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(true) {
             delay(1000)
@@ -106,6 +108,7 @@ fun HomeScreen(
         viewModel.loadRecordings()
     }
 
+    // Диалог удаления
     if (viewModel.itemToDelete != null) {
         AlertDialog(
             onDismissRequest = { viewModel.cancelDelete() },
@@ -128,54 +131,21 @@ fun HomeScreen(
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet {
-                Text(
-                    text = "ComPost Menu",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.headlineSmall
-                )
+                Text("ComPost Menu", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineSmall)
                 Divider()
-
-                // Пункт меню настроек промптов
                 NavigationDrawerItem(
-                    label = { Text("Prompt Settings") },
-                    selected = false,
+                    label = { Text("Prompt Settings") }, selected = false,
                     icon = { Icon(Icons.Default.Edit, contentDescription = null) },
                     onClick = {
                         scope.launch { drawerState.close() }
-                        onNavigateToPrompts() // ВЫЗЫВАЕМ ПЕРЕХОД
+                        onNavigateToPrompts()
                     }
                 )
-
-                NavigationDrawerItem(
-                    label = { Text("Theme: Light/Dark") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.DarkMode, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() } }
-                )
-
-                NavigationDrawerItem(
-                    label = { Text("Language") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Language, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() } }
-                )
-
+                NavigationDrawerItem(label = { Text("Theme: Light/Dark") }, selected = false, icon = { Icon(Icons.Default.DarkMode, null) }, onClick = { })
+                NavigationDrawerItem(label = { Text("Language") }, selected = false, icon = { Icon(Icons.Default.Language, null) }, onClick = { })
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
-                Text("Integrations", modifier = Modifier.padding(start = 16.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
-
-                NavigationDrawerItem(
-                    label = { Text("OpenAI API Key") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Key, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() } }
-                )
-
-                NavigationDrawerItem(
-                    label = { Text("WordPress API Key") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Key, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() } }
-                )
+                NavigationDrawerItem(label = { Text("OpenAI API Key") }, selected = false, icon = { Icon(Icons.Default.Key, null) }, onClick = { })
+                NavigationDrawerItem(label = { Text("WordPress API Key") }, selected = false, icon = { Icon(Icons.Default.Key, null) }, onClick = { })
             }
         }
     ) {
@@ -203,11 +173,8 @@ fun HomeScreen(
                     .padding(paddingValues)
                     .nestedScroll(pullRefreshState.nestedScrollConnection)
             ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(16.dp)
-                ) {
+                // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: Используем viewModel.recordings ---
+                LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                     if (!pullRefreshState.isRefreshing && viewModel.recordings.isEmpty()) {
                         item {
                             Text(
@@ -225,8 +192,8 @@ fun HomeScreen(
                                 when (item.status) {
                                     RecordingStatus.SAVED -> onNavigateToPlayer(item.id)
                                     RecordingStatus.PROCESSING -> onNavigateToSendSTT(item.id)
-                                    RecordingStatus.READY -> onNavigateToPublish(item.id)
-                                    RecordingStatus.PUBLISHED -> { }
+                                    RecordingStatus.READY -> onNavigateToPublish(item.id) // Ведет в Редактор
+                                    RecordingStatus.PUBLISHED -> onNavigateToPublish(item.id)
                                 }
                             },
                             onSendToSTT = { onNavigateToSendSTT(item.id) },
@@ -234,7 +201,7 @@ fun HomeScreen(
                             onDelete = { viewModel.requestDelete(item) },
                             onPublish = {
                                 if(item.status == RecordingStatus.PROCESSING) viewModel.mockFinishProcessing(item)
-                                else if(item.status == RecordingStatus.READY) viewModel.mockPublish(item)
+                                else if(item.status == RecordingStatus.READY) onNavigateToPublish(item.id)
                             },
                             onOpenUrl = { url ->
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
@@ -244,10 +211,7 @@ fun HomeScreen(
                     }
                 }
 
-                PullToRefreshContainer(
-                    state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter)
-                )
+                PullToRefreshContainer(state = pullRefreshState, modifier = Modifier.align(Alignment.TopCenter))
             }
 
             if (showBottomSheet) {

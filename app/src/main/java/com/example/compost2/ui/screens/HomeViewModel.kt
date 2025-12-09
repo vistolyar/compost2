@@ -10,7 +10,10 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.compost2.domain.RecordingItem
 import com.example.compost2.domain.RecordingStatus
+import com.google.gson.Gson
 import java.io.File
+import java.io.FileReader
+import java.io.FileWriter
 
 class HomeViewModel(private val context: Context) : ViewModel() {
 
@@ -23,29 +26,95 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     var isRefreshing by mutableStateOf(false)
         private set
 
+    // Используем Gson для сохранения данных в JSON
+    private val gson = Gson()
+
     fun loadRecordings() {
         val dir = context.cacheDir
         val files = dir.listFiles { file ->
+            // Ищем только аудиофайлы, json'ы подгрузим отдельно
             file.extension == "m4a" && file.name != "temp_recording.m4a"
         } ?: emptyArray()
 
         val sortedFiles = files.sortedByDescending { it.lastModified() }
-        val currentItemsMap = recordings.associateBy { it.id }
 
         recordings = sortedFiles.map { file ->
-            val existingItem = currentItemsMap[file.name]
-            if (existingItem != null) {
-                existingItem
+            // Проверяем, есть ли сохраненные данные (sidecar файл)
+            val metaFile = File(file.path + ".json")
+            if (metaFile.exists()) {
+                try {
+                    // Если есть json, читаем статус и текст оттуда
+                    val reader = FileReader(metaFile)
+                    val savedItem = gson.fromJson(reader, RecordingItem::class.java)
+                    reader.close()
+                    // Важно: путь к файлу берем реальный (на случай если он изменился), остальное из json
+                    savedItem.copy(filePath = file.absolutePath)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    createDefaultItem(file)
+                }
             } else {
-                RecordingItem(
-                    id = file.name,
-                    name = parseFileNameToDisplay(file.name),
-                    status = RecordingStatus.SAVED,
-                    filePath = file.absolutePath
-                )
+                // Если json нет, создаем "чистую" запись
+                createDefaultItem(file)
             }
         }
     }
+
+    private fun createDefaultItem(file: File): RecordingItem {
+        return RecordingItem(
+            id = file.name,
+            name = parseFileNameToDisplay(file.name),
+            status = RecordingStatus.SAVED,
+            filePath = file.absolutePath
+        )
+    }
+
+    // --- СОХРАНЕНИЕ ДАННЫХ ---
+
+    // Этот метод будем вызывать из Редактора при каждом изменении
+    fun updateArticleData(id: String, title: String, content: String) {
+        val index = recordings.indexOfFirst { it.id == id }
+        if (index != -1) {
+            val oldItem = recordings[index]
+            val newItem = oldItem.copy(
+                articleTitle = title,
+                articleContent = content,
+                // Если мы начали править, то статус как минимум READY (или оставляем текущий)
+                status = if (oldItem.status == RecordingStatus.SAVED) RecordingStatus.READY else oldItem.status
+            )
+
+            // 1. Обновляем список в памяти (для UI)
+            val newList = recordings.toMutableList()
+            newList[index] = newItem
+            recordings = newList
+
+            // 2. Сохраняем на диск
+            saveMetadataToDisk(newItem)
+        }
+    }
+
+    fun onAiResultReceived(item: RecordingItem, title: String, content: String) {
+        val newItem = item.copy(
+            status = RecordingStatus.READY,
+            articleTitle = title,
+            articleContent = content
+        )
+        updateItemInList(newItem)
+    }
+
+    // Служебный метод записи на диск
+    private fun saveMetadataToDisk(item: RecordingItem) {
+        try {
+            val metaFile = File(item.filePath + ".json")
+            val writer = FileWriter(metaFile)
+            gson.toJson(item, writer)
+            writer.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    // --- Остальные методы ---
 
     fun refresh() {
         isRefreshing = true
@@ -59,8 +128,14 @@ class HomeViewModel(private val context: Context) : ViewModel() {
 
     fun confirmDelete() {
         itemToDelete?.let { item ->
+            // Удаляем аудио
             val file = File(item.filePath)
             if (file.exists()) file.delete()
+
+            // Удаляем метаданные (json)
+            val metaFile = File(item.filePath + ".json")
+            if (metaFile.exists()) metaFile.delete()
+
             recordings = recordings.filter { it.id != item.id }
         }
         itemToDelete = null
@@ -69,8 +144,6 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     fun cancelDelete() {
         itemToDelete = null
     }
-
-    // --- Методы для смены статусов (используются в навигации) ---
 
     fun sendToSTT(item: RecordingItem) {
         updateItemStatus(item, RecordingStatus.PROCESSING)
@@ -83,7 +156,7 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     fun mockFinishProcessing(item: RecordingItem) {
         val newItem = item.copy(
             status = RecordingStatus.READY,
-            articleTitle = "AI Generated Article Title", // Заглушка
+            articleTitle = "AI Generated Article Title",
             promptName = "Default Persona"
         )
         updateItemInList(newItem)
@@ -92,7 +165,7 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     fun mockPublish(item: RecordingItem) {
         val newItem = item.copy(
             status = RecordingStatus.PUBLISHED,
-            publicUrl = "https://wordpress.com/post/123" // Заглушка
+            publicUrl = "https://wordpress.com/post/123"
         )
         updateItemInList(newItem)
     }
@@ -106,6 +179,8 @@ class HomeViewModel(private val context: Context) : ViewModel() {
         recordings = recordings.map {
             if (it.id == newItem.id) newItem else it
         }
+        // При любом обновлении статуса - сохраняем на диск!
+        saveMetadataToDisk(newItem)
     }
 
     private fun parseFileNameToDisplay(fileName: String): String {

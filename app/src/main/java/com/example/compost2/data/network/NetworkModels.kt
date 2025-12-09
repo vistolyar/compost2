@@ -2,15 +2,20 @@ package com.example.compost2.data.network
 
 import com.google.gson.annotations.SerializedName
 
-// Ответ от сервера: Готовая статья
+// НОВЫЙ КЛАСС ЗАПРОСА
+data class ArticleRequest(
+    @SerializedName("audio_base64") val audioBase64: String,
+    @SerializedName("prompt") val prompt: String,
+    @SerializedName("openai_key") val openaiKey: String
+)
+
+// Ответ от сервера
 data class ArticleResponse(
     @SerializedName("title") val title: String,
     @SerializedName("content") val content: String,
-    // Можно добавить статус, если нужно
     @SerializedName("status") val status: String? = "success"
 )
 
-// Ответ при ошибке (опционально)
 data class ErrorResponse(
     @SerializedName("error") val error: String
 )
