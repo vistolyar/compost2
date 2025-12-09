@@ -109,7 +109,7 @@ fun RecordingCard(
                     }
 
                     RecordingStatus.PROCESSING -> {
-                        // Кнопка Cancel (без Resend, как просил)
+                        // Исправлено: убрано слово Resend
                         Button(
                             onClick = onCancel,
                             modifier = Modifier.fillMaxWidth(),
@@ -119,14 +119,21 @@ fun RecordingCard(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Cancel")
                         }
+
+                        // ВРЕМЕННАЯ КНОПКА ДЛЯ ТЕСТА
+                        Button(
+                            onClick = { onPublish() }, // Используем onPublish для симуляции финиша
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
+                        ) {
+                            Text("[DEV] Simulate Finish")
+                        }
                     }
 
                     RecordingStatus.READY -> {
                         Button(
-                            onClick = onPublish, // Симулируем переход к публикации
+                            onClick = onPublish,
                             modifier = Modifier.fillMaxWidth(),
-                            // Желтый статус -> Желтая кнопка (или можно зеленую для действия Publish)
-                            // Давай сделаем зеленую для действия "Publish", но карточка сама желтая
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
                         ) {
                             Icon(Icons.Filled.Publish, contentDescription = null)
@@ -136,7 +143,7 @@ fun RecordingCard(
                     }
 
                     RecordingStatus.PUBLISHED -> {
-                        // Тут кнопок нет, действия через тап (редактирование) или ссылку
+                        // Кнопок нет
                     }
                 }
             }
@@ -146,9 +153,9 @@ fun RecordingCard(
                 onDismiss = { showMenu = false },
                 status = item.status,
                 onSendToSTT = { showMenu = false; onSendToSTT() },
-                onPlay = { showMenu = false; onClick() }, // в saved это плеер
+                onPlay = { showMenu = false; onClick() },
                 onCancel = { showMenu = false; onCancel() },
-                onEdit = { showMenu = false; onClick() }, // в published это редактор
+                onEdit = { showMenu = false; onClick() },
                 onSettings = { showMenu = false; /* Навигация в настройки поста */ },
                 onDelete = { showMenu = false; onDelete() }
             )
@@ -167,9 +174,9 @@ fun CardHeader(item: RecordingItem, onOpenUrl: (String) -> Unit) {
         }
         val labelColor = when (item.status) {
             RecordingStatus.SAVED -> MaterialTheme.colorScheme.primary
-            RecordingStatus.PROCESSING -> Color(0xFF2196F3) // Синий!
-            RecordingStatus.READY -> Color(0xFFFFC107)      // Желтый!
-            RecordingStatus.PUBLISHED -> Color(0xFF4CAF50)  // Зеленый!
+            RecordingStatus.PROCESSING -> Color(0xFF2196F3) // Синий
+            RecordingStatus.READY -> Color(0xFFFFC107)      // Желтый
+            RecordingStatus.PUBLISHED -> Color(0xFF4CAF50)  // Зеленый
         }
 
         Text(
@@ -201,7 +208,7 @@ fun CardHeader(item: RecordingItem, onOpenUrl: (String) -> Unit) {
             Row(
                 modifier = Modifier
                     .padding(top = 4.dp)
-                    .clickable { onOpenUrl(item.publicUrl) }, // Тап по ссылке
+                    .clickable { onOpenUrl(item.publicUrl) },
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(Icons.Filled.Link, null, modifier = Modifier.size(14.dp), tint = Color.Blue)
@@ -239,9 +246,9 @@ fun CardIcon(status: RecordingStatus) {
     // Цвет самой иконки
     val iconColor = when (status) {
         RecordingStatus.SAVED -> MaterialTheme.colorScheme.primary
-        RecordingStatus.PROCESSING -> Color(0xFF2196F3) // Синий!
-        RecordingStatus.READY -> Color(0xFFFFC107)      // Желтый!
-        RecordingStatus.PUBLISHED -> Color(0xFF4CAF50)  // Зеленый!
+        RecordingStatus.PROCESSING -> Color(0xFF2196F3) // Синий
+        RecordingStatus.READY -> Color(0xFFFFC107)      // Желтый
+        RecordingStatus.PUBLISHED -> Color(0xFF4CAF50)  // Зеленый
     }
 
     Box(
@@ -276,7 +283,7 @@ fun CardIcon(status: RecordingStatus) {
                 Icon(Icons.Filled.Description, null, tint = iconColor)
             }
             RecordingStatus.PUBLISHED -> {
-                Icon(Icons.Filled.Language, null, tint = iconColor) // Иконка глобуса/веба
+                Icon(Icons.Filled.Language, null, tint = iconColor)
             }
         }
     }
@@ -321,7 +328,7 @@ fun CardContextMenu(
             RecordingStatus.READY -> {
                 DropdownMenuItem(
                     text = { Text("Publish") },
-                    onClick = onEdit, // пока ведет на редактор/публикацию
+                    onClick = onEdit,
                     leadingIcon = { Icon(Icons.Filled.Publish, null) }
                 )
             }

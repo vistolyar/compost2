@@ -6,9 +6,13 @@ sealed class Screen(val route: String) {
     object Editor : Screen("editor")
     object Settings : Screen("settings")
 
-    // Изменяем маршрут: теперь он ждет параметр {fileName}
+    // Экран плеера
     object Player : Screen("player/{fileName}") {
-        // Вспомогательная функция для создания ссылки
         fun createRoute(fileName: String) = "player/$fileName"
+    }
+
+    // НОВЫЙ ЭКРАН: Отправка в STT
+    object SendToSTT : Screen("send_stt/{fileName}") {
+        fun createRoute(fileName: String) = "send_stt/$fileName"
     }
 }

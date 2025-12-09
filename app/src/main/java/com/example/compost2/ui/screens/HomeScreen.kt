@@ -43,6 +43,7 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,8 +54,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+// ViewModel создается снаружи, import viewModel() больше не нужен здесь, но оставим, чтобы не ломать старые ссылки
 import com.example.compost2.domain.RecordingStatus
 import com.example.compost2.ui.components.RecordingCard
 import kotlinx.coroutines.delay
@@ -63,31 +67,44 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
+    viewModel: HomeViewModel, // ИЗМЕНЕНИЕ: Принимаем ViewModel как параметр
     onNavigateToRecorder: () -> Unit,
-    onNavigateToPlayer: (String) -> Unit
+    onNavigateToPlayer: (String) -> Unit,
+    onNavigateToSendSTT: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val viewModel: HomeViewModel = viewModel(factory = HomeViewModel.provideFactory(context))
+    // УДАЛЕНО: val viewModel: HomeViewModel = viewModel(...) - теперь используем переданную
+
+    // Обновляем список при возврате
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // Это подгрузит файлы, но благодаря логике в HomeViewModel
+                // оно сохранит статус PROCESSING, который мы установили в AppNavigation
+                viewModel.loadRecordings()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var showBottomSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
-
-    // --- PULL TO REFRESH STATE ---
     val pullRefreshState = rememberPullToRefreshState()
 
-    // Логика обновления при свайпе
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(true) {
-            // Искусственная задержка, чтобы было видно колесико (UX)
             delay(1000)
             viewModel.refresh()
             pullRefreshState.endRefresh()
         }
     }
 
-    // Начальная загрузка
     LaunchedEffect(Unit) {
         viewModel.loadRecordings()
     }
@@ -183,12 +200,11 @@ fun HomeScreen(
             }
         ) { paddingValues ->
 
-            // Оборачиваем LazyColumn в Box для работы PullToRefresh
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .nestedScroll(pullRefreshState.nestedScrollConnection) // Связываем скролл с Refresh
+                    .nestedScroll(pullRefreshState.nestedScrollConnection)
             ) {
                 LazyColumn(
                     modifier = Modifier
@@ -211,12 +227,12 @@ fun HomeScreen(
                             onClick = {
                                 when (item.status) {
                                     RecordingStatus.SAVED -> onNavigateToPlayer(item.id)
-                                    RecordingStatus.PROCESSING -> { }
+                                    RecordingStatus.PROCESSING -> onNavigateToSendSTT(item.id)
                                     RecordingStatus.READY -> { }
                                     RecordingStatus.PUBLISHED -> { }
                                 }
                             },
-                            onSendToSTT = { viewModel.sendToSTT(item) },
+                            onSendToSTT = { onNavigateToSendSTT(item.id) },
                             onCancel = { viewModel.cancelProcessing(item) },
                             onDelete = { viewModel.requestDelete(item) },
                             onPublish = {
@@ -231,7 +247,6 @@ fun HomeScreen(
                     }
                 }
 
-                // Индикатор загрузки (колесико)
                 PullToRefreshContainer(
                     state = pullRefreshState,
                     modifier = Modifier.align(Alignment.TopCenter)
