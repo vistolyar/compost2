@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,7 +47,8 @@ import kotlin.random.Random
 @Composable
 fun PlayerScreen(
     fileName: String,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onNavigateToSendSTT: () -> Unit
 ) {
     val context = LocalContext.current
     val viewModel: PlayerViewModel = viewModel(factory = PlayerViewModel.provideFactory(context))
@@ -175,7 +177,7 @@ fun PlayerScreen(
                 )
             }
 
-            // Кнопка Replay (ПЕРЕМОТКА В НАЧАЛО)
+            // Replay
             IconButton(onClick = { viewModel.seekTo(0f) }) {
                 Icon(
                     Icons.Default.Refresh,
@@ -185,7 +187,22 @@ fun PlayerScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(32.dp))
+
+        // --- 5. НОВАЯ КНОПКА: SEND TO STT ---
+        Button(
+            onClick = {
+                // ИСПРАВЛЕНИЕ: Убрали viewModel.togglePlayPause(), чтобы не запускать воспроизведение
+                onNavigateToSendSTT()
+            },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+            shape = RoundedCornerShape(24.dp)
+        ) {
+            Text("Send to STT")
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 

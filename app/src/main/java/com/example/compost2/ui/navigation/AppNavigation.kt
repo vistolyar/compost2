@@ -12,6 +12,7 @@ import com.example.compost2.ui.screens.EditorScreen
 import com.example.compost2.ui.screens.HomeScreen
 import com.example.compost2.ui.screens.HomeViewModel
 import com.example.compost2.ui.screens.PlayerScreen
+import com.example.compost2.ui.screens.PromptSettingsScreen
 import com.example.compost2.ui.screens.PublicationScreen
 import com.example.compost2.ui.screens.RecorderScreen
 import com.example.compost2.ui.screens.SendToSTTScreen
@@ -38,8 +39,11 @@ fun AppNavigation() {
                 onNavigateToSendSTT = { fileName ->
                     navController.navigate(Screen.SendToSTT.createRoute(fileName))
                 },
-                onNavigateToPublish = { fileName -> // НОВЫЙ КОЛБЭК
+                onNavigateToPublish = { fileName ->
                     navController.navigate(Screen.Publication.createRoute(fileName))
+                },
+                onNavigateToPrompts = {
+                    navController.navigate("prompt_settings")
                 }
             )
         }
@@ -59,7 +63,10 @@ fun AppNavigation() {
             val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
             PlayerScreen(
                 fileName = fileName,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToSendSTT = {
+                    navController.navigate(Screen.SendToSTT.createRoute(fileName))
+                }
             )
         }
 
@@ -80,12 +87,12 @@ fun AppNavigation() {
                     if (item != null) {
                         homeViewModel.sendToSTT(item)
                     }
-                    navController.popBackStack()
+                    // ИСПРАВЛЕНИЕ: Возвращаемся сразу на Home, удаляя Player из истории
+                    navController.popBackStack(Screen.Home.route, inclusive = false)
                 }
             )
         }
 
-        // НОВЫЙ МАРШРУТ: Publication Screen
         composable(
             route = Screen.Publication.route,
             arguments = listOf(navArgument("fileName") { type = NavType.StringType })
@@ -96,26 +103,36 @@ fun AppNavigation() {
                 fileName = fileName,
                 onNavigateBack = { navController.popBackStack() },
                 onPublished = {
-                    // Обновляем статус в главной ViewModel на PUBLISHED
                     val item = homeViewModel.recordings.find { it.id == fileName }
                     if (item != null) {
-                        homeViewModel.mockPublish(item) // Переводим в зеленую карточку
+                        homeViewModel.mockPublish(item)
                     }
-                    navController.popBackStack()
+                    // При публикации тоже логично уходить сразу на Home
+                    navController.popBackStack(Screen.Home.route, inclusive = false)
                 },
                 onDeleted = {
-                    // Удаляем из главной ViewModel
                     val item = homeViewModel.recordings.find { it.id == fileName }
                     if (item != null) {
-                        homeViewModel.requestDelete(item) // Сначала помечаем
-                        homeViewModel.confirmDelete()     // Потом удаляем (т.к. подтверждение было внутри экрана)
+                        homeViewModel.requestDelete(item)
+                        homeViewModel.confirmDelete()
                     }
-                    navController.popBackStack()
+                    navController.popBackStack(Screen.Home.route, inclusive = false)
                 }
             )
         }
 
-        composable(Screen.Editor.route) { EditorScreen() }
-        composable(Screen.Settings.route) { SettingsScreen() }
+        composable("prompt_settings") {
+            PromptSettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Screen.Editor.route) {
+            EditorScreen()
+        }
+
+        composable(Screen.Settings.route) {
+            SettingsScreen()
+        }
     }
 }

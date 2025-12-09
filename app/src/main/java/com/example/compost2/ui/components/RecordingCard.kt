@@ -66,8 +66,8 @@ fun RecordingCard(
     onSendToSTT: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
-    onPublish: () -> Unit, // Симуляция публикации
-    onOpenUrl: (String) -> Unit // Открытие ссылки
+    onPublish: () -> Unit,
+    onOpenUrl: (String) -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -102,14 +102,12 @@ fun RecordingCard(
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Icon(Icons.Filled.Refresh, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
+                            // ИЗМЕНЕНИЕ: Убрали иконку Refresh, оставили только текст
                             Text("Send to STT")
                         }
                     }
 
                     RecordingStatus.PROCESSING -> {
-                        // Исправлено: убрано слово Resend
                         Button(
                             onClick = onCancel,
                             modifier = Modifier.fillMaxWidth(),
@@ -120,9 +118,8 @@ fun RecordingCard(
                             Text("Cancel")
                         }
 
-                        // ВРЕМЕННАЯ КНОПКА ДЛЯ ТЕСТА
                         Button(
-                            onClick = { onPublish() }, // Используем onPublish для симуляции финиша
+                            onClick = { onPublish() },
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
                         ) {
@@ -143,7 +140,6 @@ fun RecordingCard(
                     }
 
                     RecordingStatus.PUBLISHED -> {
-                        // Кнопок нет
                     }
                 }
             }
@@ -156,7 +152,7 @@ fun RecordingCard(
                 onPlay = { showMenu = false; onClick() },
                 onCancel = { showMenu = false; onCancel() },
                 onEdit = { showMenu = false; onClick() },
-                onSettings = { showMenu = false; /* Навигация в настройки поста */ },
+                onSettings = { showMenu = false; },
                 onDelete = { showMenu = false; onDelete() }
             )
         }
@@ -174,9 +170,9 @@ fun CardHeader(item: RecordingItem, onOpenUrl: (String) -> Unit) {
         }
         val labelColor = when (item.status) {
             RecordingStatus.SAVED -> MaterialTheme.colorScheme.primary
-            RecordingStatus.PROCESSING -> Color(0xFF2196F3) // Синий
-            RecordingStatus.READY -> Color(0xFFFFC107)      // Желтый
-            RecordingStatus.PUBLISHED -> Color(0xFF4CAF50)  // Зеленый
+            RecordingStatus.PROCESSING -> Color(0xFF2196F3)
+            RecordingStatus.READY -> Color(0xFFFFC107)
+            RecordingStatus.PUBLISHED -> Color(0xFF4CAF50)
         }
 
         Text(
@@ -186,7 +182,6 @@ fun CardHeader(item: RecordingItem, onOpenUrl: (String) -> Unit) {
             fontWeight = FontWeight.Bold
         )
 
-        // Основной текст
         val mainText = if (item.status == RecordingStatus.READY || item.status == RecordingStatus.PUBLISHED) {
             item.articleTitle ?: "Untitled Article"
         } else {
@@ -201,7 +196,6 @@ fun CardHeader(item: RecordingItem, onOpenUrl: (String) -> Unit) {
             overflow = TextOverflow.Ellipsis
         )
 
-        // Для опубликованных показываем ссылку
         if (item.status == RecordingStatus.PUBLISHED && item.publicUrl != null) {
             val shortUrl = if (item.publicUrl.length > 35) item.publicUrl.take(35) + "..." else item.publicUrl
 
@@ -235,20 +229,18 @@ fun CardHeader(item: RecordingItem, onOpenUrl: (String) -> Unit) {
 
 @Composable
 fun CardIcon(status: RecordingStatus) {
-    // Фон иконки
     val bgColor = when (status) {
         RecordingStatus.SAVED -> MaterialTheme.colorScheme.primaryContainer
-        RecordingStatus.PROCESSING -> Color(0xFFE3F2FD) // Светло-синий
-        RecordingStatus.READY -> Color(0xFFFFF9C4)      // Светло-желтый
-        RecordingStatus.PUBLISHED -> Color(0xFFE8F5E9)  // Светло-зеленый
+        RecordingStatus.PROCESSING -> Color(0xFFE3F2FD)
+        RecordingStatus.READY -> Color(0xFFFFF9C4)
+        RecordingStatus.PUBLISHED -> Color(0xFFE8F5E9)
     }
 
-    // Цвет самой иконки
     val iconColor = when (status) {
         RecordingStatus.SAVED -> MaterialTheme.colorScheme.primary
-        RecordingStatus.PROCESSING -> Color(0xFF2196F3) // Синий
-        RecordingStatus.READY -> Color(0xFFFFC107)      // Желтый
-        RecordingStatus.PUBLISHED -> Color(0xFF4CAF50)  // Зеленый
+        RecordingStatus.PROCESSING -> Color(0xFF2196F3)
+        RecordingStatus.READY -> Color(0xFFFFC107)
+        RecordingStatus.PUBLISHED -> Color(0xFF4CAF50)
     }
 
     Box(
