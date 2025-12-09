@@ -17,11 +17,9 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     var recordings by mutableStateOf<List<RecordingItem>>(emptyList())
         private set
 
-    // Состояние для диалога удаления
     var itemToDelete by mutableStateOf<RecordingItem?>(null)
         private set
 
-    // Состояние обновления (для спиннера)
     var isRefreshing by mutableStateOf(false)
         private set
 
@@ -32,16 +30,10 @@ class HomeViewModel(private val context: Context) : ViewModel() {
         } ?: emptyArray()
 
         val sortedFiles = files.sortedByDescending { it.lastModified() }
-
-        // Если список пустой или мы делаем принудительное обновление - пересоздаем список
-        // (Упрощенная логика: всегда перезагружаем с диска)
         val currentItemsMap = recordings.associateBy { it.id }
 
         recordings = sortedFiles.map { file ->
-            // Если такой файл уже был в списке (например, мы меняли ему статус),
-            // пытаемся сохранить старый объект, чтобы не сбросить статус на SAVED
             val existingItem = currentItemsMap[file.name]
-
             if (existingItem != null) {
                 existingItem
             } else {
@@ -55,14 +47,11 @@ class HomeViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    // Метод для Swipe-to-Refresh
     fun refresh() {
         isRefreshing = true
         loadRecordings()
         isRefreshing = false
     }
-
-    // --- ЛОГИКА УДАЛЕНИЯ ---
 
     fun requestDelete(item: RecordingItem) {
         itemToDelete = item
@@ -71,9 +60,7 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     fun confirmDelete() {
         itemToDelete?.let { item ->
             val file = File(item.filePath)
-            if (file.exists()) {
-                file.delete()
-            }
+            if (file.exists()) file.delete()
             recordings = recordings.filter { it.id != item.id }
         }
         itemToDelete = null
@@ -83,7 +70,7 @@ class HomeViewModel(private val context: Context) : ViewModel() {
         itemToDelete = null
     }
 
-    // --- СИМУЛЯЦИЯ ---
+    // --- Методы для смены статусов (используются в навигации) ---
 
     fun sendToSTT(item: RecordingItem) {
         updateItemStatus(item, RecordingStatus.PROCESSING)
@@ -96,8 +83,8 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     fun mockFinishProcessing(item: RecordingItem) {
         val newItem = item.copy(
             status = RecordingStatus.READY,
-            articleTitle = "How to optimize Android apps using AI",
-            promptName = "SEO Copywriter"
+            articleTitle = "AI Generated Article Title", // Заглушка
+            promptName = "Default Persona"
         )
         updateItemInList(newItem)
     }
@@ -105,7 +92,7 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     fun mockPublish(item: RecordingItem) {
         val newItem = item.copy(
             status = RecordingStatus.PUBLISHED,
-            publicUrl = "https://mysite.com/blog/android-ai-optimization-guide-2025"
+            publicUrl = "https://wordpress.com/post/123" // Заглушка
         )
         updateItemInList(newItem)
     }
@@ -122,22 +109,16 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     }
 
     private fun parseFileNameToDisplay(fileName: String): String {
-        try {
+        return try {
             val nameWithoutExt = fileName.substringBeforeLast(".")
             if (!nameWithoutExt.contains("-")) return nameWithoutExt
             val parts = nameWithoutExt.split("_")
-            if (parts.size < 2) return nameWithoutExt
-
             val dateTimePart = parts[0]
             val durationPart = parts[1]
-
             val dateComponents = dateTimePart.split("-")
-            val prettyDate = "${dateComponents[0]}.${dateComponents[1]}.${dateComponents[2]} ${dateComponents[3]}:${dateComponents[4]}"
-            val prettyDuration = durationPart.replace("-", ":")
-
-            return "$prettyDate   $prettyDuration"
+            "${dateComponents[0]}.${dateComponents[1]}.${dateComponents[2]} ${dateComponents[3]}:${dateComponents[4]}   ${durationPart.replace("-", ":")}"
         } catch (e: Exception) {
-            return fileName
+            fileName
         }
     }
 

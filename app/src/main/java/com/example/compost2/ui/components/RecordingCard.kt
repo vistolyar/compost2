@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Close // ИСПОЛЬЗУЕМ КРЕСТИК
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
@@ -102,7 +102,6 @@ fun RecordingCard(
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            // ИЗМЕНЕНИЕ: Убрали иконку Refresh, оставили только текст
                             Text("Send to STT")
                         }
                     }
@@ -113,7 +112,7 @@ fun RecordingCard(
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
-                            Icon(Icons.Filled.Cancel, contentDescription = null)
+                            Icon(Icons.Filled.Close, contentDescription = null) // КРЕСТИК
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Cancel")
                         }
@@ -314,7 +313,7 @@ fun CardContextMenu(
                 DropdownMenuItem(
                     text = { Text("Cancel") },
                     onClick = onCancel,
-                    leadingIcon = { Icon(Icons.Filled.Cancel, null) }
+                    leadingIcon = { Icon(Icons.Filled.Close, null) } // КРЕСТИК
                 )
             }
             RecordingStatus.READY -> {
