@@ -12,6 +12,7 @@ import com.example.compost2.ui.screens.EditorScreen
 import com.example.compost2.ui.screens.HomeScreen
 import com.example.compost2.ui.screens.HomeViewModel
 import com.example.compost2.ui.screens.PlayerScreen
+import com.example.compost2.ui.screens.PublicationScreen
 import com.example.compost2.ui.screens.RecorderScreen
 import com.example.compost2.ui.screens.SendToSTTScreen
 import com.example.compost2.ui.screens.SettingsScreen
@@ -21,14 +22,11 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val context = LocalContext.current
 
-    // ВАЖНО: Создаем ViewModel ЗДЕСЬ, чтобы она была одна на всё приложение
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.provideFactory(context))
 
     NavHost(navController = navController, startDestination = Screen.Home.route) {
 
-        // Главный экран
         composable(Screen.Home.route) {
-            // Передаем уже созданную viewModel
             HomeScreen(
                 viewModel = homeViewModel,
                 onNavigateToRecorder = {
@@ -39,11 +37,13 @@ fun AppNavigation() {
                 },
                 onNavigateToSendSTT = { fileName ->
                     navController.navigate(Screen.SendToSTT.createRoute(fileName))
+                },
+                onNavigateToPublish = { fileName -> // НОВЫЙ КОЛБЭК
+                    navController.navigate(Screen.Publication.createRoute(fileName))
                 }
             )
         }
 
-        // Экран записи
         composable(Screen.Recorder.route) {
             RecorderScreen(
                 onNavigateToHome = {
@@ -52,7 +52,6 @@ fun AppNavigation() {
             )
         }
 
-        // Экран Плеера
         composable(
             route = Screen.Player.route,
             arguments = listOf(navArgument("fileName") { type = NavType.StringType })
@@ -64,7 +63,6 @@ fun AppNavigation() {
             )
         }
 
-        // Экран Отправки в STT
         composable(
             route = Screen.SendToSTT.route,
             arguments = listOf(navArgument("fileName") { type = NavType.StringType })
@@ -78,13 +76,40 @@ fun AppNavigation() {
                     navController.navigate(Screen.Player.createRoute(file))
                 },
                 onProcessStarted = {
-                    // 1. Находим нужную запись в памяти ОБЩЕЙ ViewModel
                     val item = homeViewModel.recordings.find { it.id == fileName }
                     if (item != null) {
-                        // 2. Меняем статус на PROCESSING
                         homeViewModel.sendToSTT(item)
                     }
-                    // 3. Возвращаемся. HomeScreen увидит изменение, так как VM общая.
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        // НОВЫЙ МАРШРУТ: Publication Screen
+        composable(
+            route = Screen.Publication.route,
+            arguments = listOf(navArgument("fileName") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
+
+            PublicationScreen(
+                fileName = fileName,
+                onNavigateBack = { navController.popBackStack() },
+                onPublished = {
+                    // Обновляем статус в главной ViewModel на PUBLISHED
+                    val item = homeViewModel.recordings.find { it.id == fileName }
+                    if (item != null) {
+                        homeViewModel.mockPublish(item) // Переводим в зеленую карточку
+                    }
+                    navController.popBackStack()
+                },
+                onDeleted = {
+                    // Удаляем из главной ViewModel
+                    val item = homeViewModel.recordings.find { it.id == fileName }
+                    if (item != null) {
+                        homeViewModel.requestDelete(item) // Сначала помечаем
+                        homeViewModel.confirmDelete()     // Потом удаляем (т.к. подтверждение было внутри экрана)
+                    }
                     navController.popBackStack()
                 }
             )
