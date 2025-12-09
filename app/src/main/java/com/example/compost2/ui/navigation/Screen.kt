@@ -4,7 +4,6 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Recorder : Screen("recorder")
 
-    // ИЗМЕНЕНО: Editor теперь тоже принимает fileName
     object Editor : Screen("editor/{fileName}") {
         fun createRoute(fileName: String) = "editor/$fileName"
     }
@@ -21,5 +20,10 @@ sealed class Screen(val route: String) {
 
     object Publication : Screen("publish/{fileName}") {
         fun createRoute(fileName: String) = "publish/$fileName"
+    }
+
+    // НОВЫЙ МАРШРУТ (принимает тип сервиса)
+    object ApiKeySettings : Screen("api_key/{serviceType}") {
+        fun createRoute(serviceType: String) = "api_key/$serviceType"
     }
 }

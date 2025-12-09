@@ -8,6 +8,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.compost2.ui.screens.ApiKeyScreen
 import com.example.compost2.ui.screens.EditorScreen
 import com.example.compost2.ui.screens.HomeScreen
 import com.example.compost2.ui.screens.HomeViewModel
@@ -43,11 +44,13 @@ fun AppNavigation() {
                     navController.navigate(Screen.SendToSTT.createRoute(fileName))
                 },
                 onNavigateToPublish = { fileName ->
-                    // Переходим в Редактор, чтобы увидеть текст
                     navController.navigate(Screen.Editor.createRoute(fileName))
                 },
                 onNavigateToPrompts = {
                     navController.navigate("prompt_settings")
+                },
+                onNavigateToApiKey = { type ->
+                    navController.navigate(Screen.ApiKeySettings.createRoute(type))
                 }
             )
         }
@@ -94,14 +97,12 @@ fun AppNavigation() {
                     navController.navigate(Screen.Player.createRoute(file))
                 },
                 onProcessStarted = {
-                    // Успех! Забираем данные и обновляем общий список
                     val item = homeViewModel.recordings.find { it.id == fileName }
                     if (item != null) {
                         val title = sendToSTTViewModel.resultTitle
                         val content = sendToSTTViewModel.resultBody
                         homeViewModel.onAiResultReceived(item, title, content)
                     }
-                    // Возвращаемся на Главный
                     navController.popBackStack(Screen.Home.route, inclusive = false)
                 }
             )
@@ -113,11 +114,8 @@ fun AppNavigation() {
             arguments = listOf(navArgument("fileName") { type = NavType.StringType })
         ) { backStackEntry ->
             val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
-
-            // 1. Ищем запись с текстом в памяти
             val item = homeViewModel.recordings.find { it.id == fileName }
 
-            // 2. Передаем её в экран
             EditorScreen(
                 item = item,
                 onNavigateBack = { navController.popBackStack() },
@@ -127,7 +125,6 @@ fun AppNavigation() {
                 onRecreate = {
                     navController.navigate(Screen.SendToSTT.createRoute(fileName))
                 },
-                // ВАЖНО: Передаем функцию сохранения данных обратно в ViewModel
                 onUpdateContent = { title, content ->
                     homeViewModel.updateArticleData(fileName, title, content)
                 }
@@ -162,7 +159,19 @@ fun AppNavigation() {
             )
         }
 
-        // --- НАСТРОЙКИ ---
+        // --- НАСТРОЙКИ КЛЮЧЕЙ (НОВОЕ) ---
+        composable(
+            route = Screen.ApiKeySettings.route,
+            arguments = listOf(navArgument("serviceType") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val serviceType = backStackEntry.arguments?.getString("serviceType") ?: "openai"
+            ApiKeyScreen(
+                serviceType = serviceType,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // --- НАСТРОЙКИ ПРОМПТОВ ---
         composable("prompt_settings") {
             PromptSettingsScreen(
                 onNavigateBack = { navController.popBackStack() }

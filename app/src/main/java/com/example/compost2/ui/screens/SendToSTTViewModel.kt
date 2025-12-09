@@ -12,20 +12,21 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.compost2.data.SettingsDataStore
 import com.example.compost2.data.network.ArticleRequest
 import com.example.compost2.data.network.RetrofitClient
 import com.example.compost2.domain.RecordingItem
 import com.example.compost2.domain.RecordingStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
 class SendToSTTViewModel(private val context: Context) : ViewModel() {
 
-    // Убедись, что твой ключ тут остался!
-    private val TEMP_OPENAI_KEY = "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"
+    private val dataStore = SettingsDataStore(context)
 
     var recordingItem by mutableStateOf<RecordingItem?>(null)
         private set
@@ -74,11 +75,19 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
 
         uploadJob = viewModelScope.launch {
             try {
-                // Мы убрали блок PING - он больше не нужен
+                // 1. Читаем ключ из настроек
+                val savedKey = dataStore.openAiKey.first()
+
+                if (savedKey.isNullOrBlank()) {
+                    Toast.makeText(context, "Error: OpenAI API Key not set! Go to Menu -> Settings", Toast.LENGTH_LONG).show()
+                    isUploading = false
+                    uploadProgress = 0f
+                    return@launch
+                }
 
                 val file = File(item.filePath)
 
-                // 1. Конвертируем в Base64
+                // 2. Конвертируем в Base64
                 val base64Audio = withContext(Dispatchers.IO) {
                     val bytes = file.readBytes()
                     Base64.encodeToString(bytes, Base64.NO_WRAP)
@@ -86,14 +95,14 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
 
                 uploadProgress = 0.3f
 
-                // 2. Создаем запрос
+                // 3. Создаем запрос с реальным ключом
                 val request = ArticleRequest(
                     audioBase64 = base64Audio,
                     prompt = selectedPrompt,
-                    openaiKey = TEMP_OPENAI_KEY
+                    openaiKey = savedKey
                 )
 
-                // 3. Отправляем
+                // 4. Отправляем
                 val response = RetrofitClient.api.uploadAudio(request)
 
                 uploadProgress = 0.9f

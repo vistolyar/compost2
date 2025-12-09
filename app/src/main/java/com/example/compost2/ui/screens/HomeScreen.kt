@@ -71,12 +71,12 @@ fun HomeScreen(
     onNavigateToPlayer: (String) -> Unit,
     onNavigateToSendSTT: (String) -> Unit,
     onNavigateToPublish: (String) -> Unit,
-    onNavigateToPrompts: () -> Unit
+    onNavigateToPrompts: () -> Unit,
+    onNavigateToApiKey: (String) -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Обновляем список при возврате на экран
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -95,7 +95,6 @@ fun HomeScreen(
     val sheetState = rememberModalBottomSheetState()
     val pullRefreshState = rememberPullToRefreshState()
 
-    // Логика Pull-to-Refresh
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(true) {
             delay(1000)
@@ -108,7 +107,6 @@ fun HomeScreen(
         viewModel.loadRecordings()
     }
 
-    // Диалог удаления
     if (viewModel.itemToDelete != null) {
         AlertDialog(
             onDismissRequest = { viewModel.cancelDelete() },
@@ -133,19 +131,53 @@ fun HomeScreen(
             ModalDrawerSheet {
                 Text("ComPost Menu", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineSmall)
                 Divider()
+
                 NavigationDrawerItem(
-                    label = { Text("Prompt Settings") }, selected = false,
+                    label = { Text("Prompt Settings") },
+                    selected = false,
                     icon = { Icon(Icons.Default.Edit, contentDescription = null) },
                     onClick = {
                         scope.launch { drawerState.close() }
                         onNavigateToPrompts()
                     }
                 )
-                NavigationDrawerItem(label = { Text("Theme: Light/Dark") }, selected = false, icon = { Icon(Icons.Default.DarkMode, null) }, onClick = { })
-                NavigationDrawerItem(label = { Text("Language") }, selected = false, icon = { Icon(Icons.Default.Language, null) }, onClick = { })
+
+                NavigationDrawerItem(
+                    label = { Text("Theme: Light/Dark") },
+                    selected = false,
+                    icon = { Icon(Icons.Default.DarkMode, contentDescription = null) },
+                    onClick = { scope.launch { drawerState.close() } }
+                )
+
+                NavigationDrawerItem(
+                    label = { Text("Language") },
+                    selected = false,
+                    icon = { Icon(Icons.Default.Language, contentDescription = null) },
+                    onClick = { scope.launch { drawerState.close() } }
+                )
+
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
-                NavigationDrawerItem(label = { Text("OpenAI API Key") }, selected = false, icon = { Icon(Icons.Default.Key, null) }, onClick = { })
-                NavigationDrawerItem(label = { Text("WordPress API Key") }, selected = false, icon = { Icon(Icons.Default.Key, null) }, onClick = { })
+                Text("Integrations", modifier = Modifier.padding(start = 16.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
+
+                NavigationDrawerItem(
+                    label = { Text("OpenAI API Key") },
+                    selected = false,
+                    icon = { Icon(Icons.Default.Key, contentDescription = null) },
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onNavigateToApiKey("openai")
+                    }
+                )
+
+                NavigationDrawerItem(
+                    label = { Text("WordPress API Key") },
+                    selected = false,
+                    icon = { Icon(Icons.Default.Key, contentDescription = null) },
+                    onClick = {
+                        scope.launch { drawerState.close() }
+                        onNavigateToApiKey("wordpress")
+                    }
+                )
             }
         }
     ) {
@@ -173,7 +205,6 @@ fun HomeScreen(
                     .padding(paddingValues)
                     .nestedScroll(pullRefreshState.nestedScrollConnection)
             ) {
-                // --- ГЛАВНОЕ ИСПРАВЛЕНИЕ: Используем viewModel.recordings ---
                 LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                     if (!pullRefreshState.isRefreshing && viewModel.recordings.isEmpty()) {
                         item {
@@ -192,7 +223,7 @@ fun HomeScreen(
                                 when (item.status) {
                                     RecordingStatus.SAVED -> onNavigateToPlayer(item.id)
                                     RecordingStatus.PROCESSING -> onNavigateToSendSTT(item.id)
-                                    RecordingStatus.READY -> onNavigateToPublish(item.id) // Ведет в Редактор
+                                    RecordingStatus.READY -> onNavigateToPublish(item.id)
                                     RecordingStatus.PUBLISHED -> onNavigateToPublish(item.id)
                                 }
                             },
@@ -211,7 +242,10 @@ fun HomeScreen(
                     }
                 }
 
-                PullToRefreshContainer(state = pullRefreshState, modifier = Modifier.align(Alignment.TopCenter))
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
 
             if (showBottomSheet) {
