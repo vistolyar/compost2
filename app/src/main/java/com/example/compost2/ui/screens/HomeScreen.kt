@@ -2,7 +2,6 @@ package com.example.compost2.ui.screens
 
 import android.content.Intent
 import android.net.Uri
-import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -77,6 +76,7 @@ fun HomeScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
+    // Авто-обновление списка при возврате на экран
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -95,6 +95,7 @@ fun HomeScreen(
     val sheetState = rememberModalBottomSheetState()
     val pullRefreshState = rememberPullToRefreshState()
 
+    // Логика Pull-to-Refresh
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(true) {
             delay(1000)
@@ -103,10 +104,12 @@ fun HomeScreen(
         }
     }
 
+    // Первичная загрузка
     LaunchedEffect(Unit) {
         viewModel.loadRecordings()
     }
 
+    // Диалог удаления записи
     if (viewModel.itemToDelete != null) {
         AlertDialog(
             onDismissRequest = { viewModel.cancelDelete() },
@@ -132,8 +135,9 @@ fun HomeScreen(
                 Text("ComPost Menu", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineSmall)
                 Divider()
 
+                // Пункт меню "Prompts" (бывший Prompt Settings)
                 NavigationDrawerItem(
-                    label = { Text("Prompt Settings") },
+                    label = { Text("Prompts") },
                     selected = false,
                     icon = { Icon(Icons.Default.Edit, contentDescription = null) },
                     onClick = {
@@ -142,13 +146,13 @@ fun HomeScreen(
                     }
                 )
 
+                // Заглушки для темы и языка
                 NavigationDrawerItem(
                     label = { Text("Theme: Light/Dark") },
                     selected = false,
                     icon = { Icon(Icons.Default.DarkMode, contentDescription = null) },
                     onClick = { scope.launch { drawerState.close() } }
                 )
-
                 NavigationDrawerItem(
                     label = { Text("Language") },
                     selected = false,
@@ -159,6 +163,7 @@ fun HomeScreen(
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 Text("Integrations", modifier = Modifier.padding(start = 16.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
 
+                // Настройки API ключей
                 NavigationDrawerItem(
                     label = { Text("OpenAI API Key") },
                     selected = false,
@@ -205,7 +210,11 @@ fun HomeScreen(
                     .padding(paddingValues)
                     .nestedScroll(pullRefreshState.nestedScrollConnection)
             ) {
-                LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
                     if (!pullRefreshState.isRefreshing && viewModel.recordings.isEmpty()) {
                         item {
                             Text(

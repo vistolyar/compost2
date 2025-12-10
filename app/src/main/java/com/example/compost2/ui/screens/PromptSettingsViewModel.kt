@@ -8,60 +8,88 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.compost2.data.PromptsRepository
 import com.example.compost2.domain.PromptItem
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
-class PromptSettingsViewModel(private val context: Context) : ViewModel() {
+class PromptSettingsViewModel(context: Context) : ViewModel() {
 
-    // Исходный список (имитация базы данных)
-    private var allPrompts = mutableListOf(
-        PromptItem("1", "Default Transcriber", "Just transcribe the audio exactly as is.", false, "Today"),
-        PromptItem("2", "SEO Blog Post", "You are an SEO expert. Write a structured blog post...", false, "Yesterday"),
-        PromptItem("3", "LinkedIn Virality", "Make it punchy, use emojis, focus on business...", true, "2 days ago"),
-        PromptItem("4", "Summarizer", "Create a bullet-point summary of the recording.", false, "Last week")
-    )
+    private val repository = PromptsRepository(context)
 
-    // Список для отображения (фильтрованный)
-    var visiblePrompts by mutableStateOf<List<PromptItem>>(emptyList())
+    // Текущий список
+    var prompts by mutableStateOf(emptyList<PromptItem>())
         private set
 
-    // Текущая вкладка: 0 = Published (All), 1 = Drafts
-    var selectedTab by mutableStateOf(0)
-        private set
+    // Состояние для диалога редактирования/создания
+    var showDialog by mutableStateOf(false)
+    var currentEditingId: String? = null // Если null - значит создаем новый
+    var editTitle by mutableStateOf("")
+    var editContent by mutableStateOf("")
 
     init {
-        updateFilter()
+        loadPrompts()
     }
 
-    fun selectTab(index: Int) {
-        selectedTab = index
-        updateFilter()
-    }
-
-    private fun updateFilter() {
-        visiblePrompts = if (selectedTab == 0) {
-            allPrompts.filter { !it.isDraft } // Показываем опубликованные
-        } else {
-            allPrompts.filter { it.isDraft }  // Показываем черновики
-        }
+    private fun loadPrompts() {
+        prompts = repository.getPrompts()
     }
 
     fun deletePrompt(id: String) {
-        allPrompts.removeIf { it.id == id }
-        updateFilter()
+        repository.deletePrompt(id)
+        loadPrompts()
     }
 
-    // Заглушка для создания
-    fun createNewPrompt() {
-        val newPrompt = PromptItem(
-            id = UUID.randomUUID().toString(),
-            title = "New Prompt Draft",
-            content = "",
-            isDraft = true,
-            lastModified = "Just now"
-        )
-        allPrompts.add(0, newPrompt)
-        selectTab(1) // Переключаемся на черновики, чтобы увидеть новый
+    // Открыть диалог создания
+    fun openCreateDialog() {
+        currentEditingId = null
+        editTitle = ""
+        editContent = ""
+        showDialog = true
+    }
+
+    // Открыть диалог редактирования
+    fun openEditDialog(item: PromptItem) {
+        currentEditingId = item.id
+        editTitle = item.title
+        editContent = item.content
+        showDialog = true
+    }
+
+    // Сохранить (из диалога)
+    fun saveFromDialog() {
+        val timestamp = SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date())
+
+        if (currentEditingId == null) {
+            // Создание нового
+            val newItem = PromptItem(
+                id = UUID.randomUUID().toString(),
+                title = editTitle,
+                content = editContent,
+                isDraft = false,
+                lastModified = timestamp
+            )
+            repository.addPrompt(newItem)
+        } else {
+            // Обновление старого
+            val updatedItem = PromptItem(
+                id = currentEditingId!!,
+                title = editTitle,
+                content = editContent,
+                isDraft = false,
+                lastModified = timestamp
+            )
+            repository.updatePrompt(updatedItem)
+        }
+
+        loadPrompts()
+        showDialog = false
+    }
+
+    fun closeDialog() {
+        showDialog = false
     }
 
     companion object {

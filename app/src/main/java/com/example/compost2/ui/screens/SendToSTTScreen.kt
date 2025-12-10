@@ -18,9 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close // Используем Close вместо Cancel, чтобы не было ошибок
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -31,9 +32,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,20 +44,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SendToSTTScreen(
-    viewModel: SendToSTTViewModel, // Принимаем ViewModel снаружи
+    viewModel: SendToSTTViewModel,
     fileName: String,
     onNavigateBack: () -> Unit,
     onNavigateToPlayer: (String) -> Unit,
     onProcessStarted: () -> Unit
 ) {
-    // Мы больше не создаем viewModel здесь через viewModel(), используем переданную
 
     LaunchedEffect(fileName) {
         viewModel.loadRecording(fileName)
@@ -103,7 +105,7 @@ fun SendToSTTScreen(
                     Button(
                         onClick = { viewModel.startProcessing() },
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = viewModel.recordingItem != null
+                        enabled = viewModel.recordingItem != null && viewModel.selectedPrompt != null
                     ) {
                         Icon(Icons.Default.CloudUpload, null)
                         Spacer(modifier = Modifier.width(8.dp))
@@ -119,7 +121,6 @@ fun SendToSTTScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // 1. Инфо о файле
             Text("File Info", style = MaterialTheme.typography.titleSmall, color = Color.Gray)
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -163,19 +164,20 @@ fun SendToSTTScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 2. Выбор промпта
+            // Заголовок и кнопка Добавить
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Select Persona / Prompt", style = MaterialTheme.typography.titleSmall, color = Color.Gray, modifier = Modifier.weight(1f))
-                IconButton(onClick = { /* TODO */ }) {
+                Text("Select Prompt", style = MaterialTheme.typography.titleSmall, color = Color.Gray, modifier = Modifier.weight(1f))
+                IconButton(onClick = { viewModel.openAddDialog() }) {
                     Icon(Icons.Default.Add, contentDescription = "Add Prompt")
                 }
             }
 
             Divider()
 
+            // Список промптов (реальный)
             LazyColumn(modifier = Modifier.weight(1f)) {
                 items(viewModel.prompts) { prompt ->
                     Row(
@@ -186,17 +188,64 @@ fun SendToSTTScreen(
                             .padding(vertical = 8.dp)
                     ) {
                         RadioButton(
-                            selected = (prompt == viewModel.selectedPrompt),
+                            selected = (prompt.id == viewModel.selectedPrompt?.id),
                             onClick = { viewModel.selectPrompt(prompt) }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = prompt,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Column {
+                            Text(
+                                text = prompt.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = prompt.content,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    // Всплывающее окно добавления промпта
+    if (viewModel.showAddDialog) {
+        AlertDialog(
+            onDismissRequest = { viewModel.closeAddDialog() },
+            title = { Text("New Prompt") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = viewModel.newPromptTitle,
+                        onValueChange = { viewModel.newPromptTitle = it },
+                        label = { Text("Name (e.g. SEO Expert)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = viewModel.newPromptContent,
+                        onValueChange = { viewModel.newPromptContent = it },
+                        label = { Text("Instructions") },
+                        modifier = Modifier.fillMaxWidth().height(120.dp),
+                        maxLines = 5
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = { viewModel.saveNewPrompt() }) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.closeAddDialog() }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }

@@ -12,9 +12,11 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.compost2.data.PromptsRepository
 import com.example.compost2.data.SettingsDataStore
 import com.example.compost2.data.network.ArticleRequest
 import com.example.compost2.data.network.RetrofitClient
+import com.example.compost2.domain.PromptItem
 import com.example.compost2.domain.RecordingItem
 import com.example.compost2.domain.RecordingStatus
 import kotlinx.coroutines.Dispatchers
@@ -23,23 +25,30 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
 
 class SendToSTTViewModel(private val context: Context) : ViewModel() {
 
     private val dataStore = SettingsDataStore(context)
+    private val promptsRepository = PromptsRepository(context)
 
     var recordingItem by mutableStateOf<RecordingItem?>(null)
         private set
 
-    var prompts by mutableStateOf(listOf(
-        "Default: Just transcribe text",
-        "SEO Copywriter: Create a structured blog post with headers",
-        "LinkedIn Expert: Viral business post style",
-        "Summary: Bullet points only"
-    ))
+    // Список теперь берется из репозитория
+    var prompts by mutableStateOf(emptyList<PromptItem>())
         private set
 
-    var selectedPrompt by mutableStateOf(prompts[0])
+    // Выбранный промпт - теперь это объект
+    var selectedPrompt by mutableStateOf<PromptItem?>(null)
+
+    // Состояния для диалога создания промпта
+    var showAddDialog by mutableStateOf(false)
+    var newPromptTitle by mutableStateOf("")
+    var newPromptContent by mutableStateOf("")
 
     var isUploading by mutableStateOf(false)
     var uploadProgress by mutableFloatStateOf(0f)
@@ -49,6 +58,18 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
     var resultBody: String = ""
 
     private var uploadJob: Job? = null
+
+    init {
+        loadPrompts()
+    }
+
+    private fun loadPrompts() {
+        prompts = promptsRepository.getPrompts()
+        // По умолчанию выбираем первый, если он есть
+        if (prompts.isNotEmpty() && selectedPrompt == null) {
+            selectedPrompt = prompts[0]
+        }
+    }
 
     fun loadRecording(fileName: String) {
         val file = File(context.cacheDir, fileName)
@@ -62,24 +83,52 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    fun selectPrompt(prompt: String) {
+    fun selectPrompt(prompt: PromptItem) {
         selectedPrompt = prompt
+    }
+
+    // Логика добавления нового промпта прямо с этого экрана
+    fun openAddDialog() {
+        newPromptTitle = ""
+        newPromptContent = ""
+        showAddDialog = true
+    }
+
+    fun closeAddDialog() {
+        showAddDialog = false
+    }
+
+    fun saveNewPrompt() {
+        if (newPromptTitle.isBlank() || newPromptContent.isBlank()) return
+
+        val newPrompt = PromptItem(
+            id = UUID.randomUUID().toString(),
+            title = newPromptTitle,
+            content = newPromptContent,
+            isDraft = false,
+            lastModified = SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date())
+        )
+        promptsRepository.addPrompt(newPrompt)
+        loadPrompts() // Обновляем список
+        selectedPrompt = newPrompt // Сразу выбираем созданный
+        showAddDialog = false
     }
 
     fun startProcessing() {
         val item = recordingItem ?: return
-        if (isUploading) return
+        val currentPrompt = selectedPrompt
+
+        if (isUploading || currentPrompt == null) return
 
         isUploading = true
         uploadProgress = 0.1f
 
         uploadJob = viewModelScope.launch {
             try {
-                // 1. Читаем ключ из настроек
                 val savedKey = dataStore.openAiKey.first()
 
                 if (savedKey.isNullOrBlank()) {
-                    Toast.makeText(context, "Error: OpenAI API Key not set! Go to Menu -> Settings", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Error: OpenAI API Key not set!", Toast.LENGTH_LONG).show()
                     isUploading = false
                     uploadProgress = 0f
                     return@launch
@@ -87,7 +136,6 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
 
                 val file = File(item.filePath)
 
-                // 2. Конвертируем в Base64
                 val base64Audio = withContext(Dispatchers.IO) {
                     val bytes = file.readBytes()
                     Base64.encodeToString(bytes, Base64.NO_WRAP)
@@ -95,20 +143,22 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
 
                 uploadProgress = 0.3f
 
-                // 3. Создаем запрос с реальным ключом
                 val request = ArticleRequest(
                     audioBase64 = base64Audio,
-                    prompt = selectedPrompt,
+                    // Отправляем ТЕКСТ (Content) промпта, а не заголовок
+                    prompt = currentPrompt.content,
                     openaiKey = savedKey
                 )
 
-                // 4. Отправляем
                 val response = RetrofitClient.api.uploadAudio(request)
 
                 uploadProgress = 0.9f
 
                 resultTitle = response.title
                 resultBody = response.content
+
+                // Сохраняем имя использованного промпта в карточку (для истории, если нужно)
+                // (Это логика будет в HomeViewModel при сохранении результата)
 
                 uploadProgress = 1.0f
                 isFinished = true
