@@ -1,6 +1,7 @@
 package com.example.compost2.ui.screens
 
 import android.content.Context
+import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,96 +10,129 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.compost2.data.SettingsDataStore
+import com.example.compost2.data.network.WpCategory
+import com.example.compost2.data.network.WpClient
+import com.example.compost2.data.network.WpPostRequest
 import com.example.compost2.domain.RecordingItem
-import com.example.compost2.domain.RecordingStatus
-import kotlinx.coroutines.delay
+import com.google.gson.Gson
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
+import java.io.FileReader
 
 class PublicationViewModel(private val context: Context) : ViewModel() {
+
+    private val dataStore = SettingsDataStore(context)
+    private val gson = Gson()
 
     var recordingItem by mutableStateOf<RecordingItem?>(null)
         private set
 
-    // Список категорий (пока фиктивный, позже будем тянуть из WP)
-    val categories = listOf(
-        "Uncategorized",
-        "Personal Blog",
-        "Technology & AI",
-        "Business Ideas",
-        "Travel Diaries",
-        "Crypto News",
-        "Marketing Tips"
-    )
-
-    // Выбранные категории
-    var selectedCategories by mutableStateOf(setOf<String>())
+    // Список рубрик с сайта
+    var categories by mutableStateOf<List<WpCategory>>(emptyList())
         private set
 
-    // Состояния загрузки
+    // Выбранные рубрики (ID)
+    var selectedCategoryIds by mutableStateOf(setOf<Int>())
+        private set
+
+    var isLoading by mutableStateOf(false)
     var isPublishing by mutableStateOf(false)
-    var isSavingDraft by mutableStateOf(false)
 
-    // Сигналы завершения
-    var isPublishedSuccess by mutableStateOf(false)
-    var isDeletedSuccess by mutableStateOf(false)
+    // Ссылка на опубликованную статью
+    var publishedUrl: String? = null
+    var isSuccess by mutableStateOf(false)
 
-    fun loadRecording(fileName: String) {
+    fun loadData(fileName: String) {
+        // 1. Загружаем данные статьи из локального JSON
         val file = File(context.cacheDir, fileName)
         if (file.exists()) {
-            recordingItem = RecordingItem(
-                id = file.name,
-                name = parseFileNameToDisplay(file.name),
-                status = RecordingStatus.READY, // Мы знаем, что сюда приходят только Ready
-                filePath = file.absolutePath,
-                articleTitle = "Generated Article from ${parseFileNameToDisplay(file.name)}" // Заглушка, если нет заголовка
-            )
+            val metaFile = File(file.path + ".json")
+            if (metaFile.exists()) {
+                try {
+                    val reader = FileReader(metaFile)
+                    val item = gson.fromJson(reader, RecordingItem::class.java)
+                    reader.close()
+                    recordingItem = item.copy(filePath = file.absolutePath)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
+
+        // 2. Загружаем рубрики с сайта
+        fetchCategories()
+    }
+
+    private fun fetchCategories() {
+        isLoading = true
+        viewModelScope.launch {
+            try {
+                // Читаем настройки
+                val url = dataStore.wpUrl.first() ?: ""
+                val username = dataStore.wpUsername.first() ?: ""
+                val password = dataStore.wpPassword.first() ?: ""
+
+                if (url.isNotBlank() && password.isNotBlank()) {
+                    val api = WpClient.create(url, username, password)
+                    categories = api.getCategories()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(context, "Failed to load categories: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                isLoading = false
+            }
         }
     }
 
-    fun toggleCategory(category: String) {
-        selectedCategories = if (selectedCategories.contains(category)) {
-            selectedCategories - category
+    fun toggleCategory(categoryId: Int) {
+        selectedCategoryIds = if (selectedCategoryIds.contains(categoryId)) {
+            selectedCategoryIds - categoryId
         } else {
-            selectedCategories + category
+            selectedCategoryIds + categoryId
         }
     }
 
-    //  Publish - отправляет на WP и меняет статус
-    fun publishPost() {
+    fun publishPost(status: String = "publish") { // "publish" или "draft"
+        val item = recordingItem ?: return
         if (isPublishing) return
+
         isPublishing = true
-
         viewModelScope.launch {
-            delay(1500) // Симуляция сети
-            isPublishing = false
-            isPublishedSuccess = true
+            try {
+                val url = dataStore.wpUrl.first() ?: ""
+                val username = dataStore.wpUsername.first() ?: ""
+                val password = dataStore.wpPassword.first() ?: ""
+
+                if (url.isBlank() || password.isBlank()) {
+                    Toast.makeText(context, "WP Settings missing!", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val api = WpClient.create(url, username, password)
+
+                val request = WpPostRequest(
+                    title = item.articleTitle ?: "New Article",
+                    content = item.articleContent ?: "",
+                    status = status,
+                    categories = selectedCategoryIds.toList()
+                )
+
+                val response = api.createPost(request)
+
+                publishedUrl = response.link
+                isSuccess = true
+                Toast.makeText(context, "Success! Post ID: ${response.id}", Toast.LENGTH_SHORT).show()
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(context, "Publish Error: ${e.message}", Toast.LENGTH_LONG).show()
+            } finally {
+                isPublishing = false
+            }
         }
-    }
-
-    //  Save Draft - просто сохраняет на WP, статус локальный не меняет
-    fun saveDraft() {
-        if (isSavingDraft) return
-        isSavingDraft = true
-
-        viewModelScope.launch {
-            delay(1000) // Симуляция
-            isSavingDraft = false
-            // Тут мы бы показали Toast "Draft Saved", но статус карточки не меняем
-        }
-    }
-
-    //  Delete
-    fun deletePost() {
-        recordingItem?.let { item ->
-            val file = File(item.filePath)
-            if (file.exists()) file.delete()
-            isDeletedSuccess = true
-        }
-    }
-
-    private fun parseFileNameToDisplay(fileName: String): String {
-        return fileName.substringBeforeLast(".") // Упрощенный парсер
     }
 
     companion object {

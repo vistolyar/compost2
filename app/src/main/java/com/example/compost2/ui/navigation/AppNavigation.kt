@@ -44,6 +44,7 @@ fun AppNavigation() {
                     navController.navigate(Screen.SendToSTT.createRoute(fileName))
                 },
                 onNavigateToPublish = { fileName ->
+                    // Переход в редактор для проверки перед публикацией
                     navController.navigate(Screen.Editor.createRoute(fileName))
                 },
                 onNavigateToPrompts = {
@@ -86,7 +87,6 @@ fun AppNavigation() {
         ) { backStackEntry ->
             val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
 
-            // Используем отдельную VM для логики отправки
             val sendToSTTViewModel: SendToSTTViewModel = viewModel(factory = SendToSTTViewModel.provideFactory(context))
 
             SendToSTTScreen(
@@ -141,11 +141,14 @@ fun AppNavigation() {
             PublicationScreen(
                 fileName = fileName,
                 onNavigateBack = { navController.popBackStack() },
-                onPublished = {
+                onPublished = { url ->
+                    // 1. Находим запись
                     val item = homeViewModel.recordings.find { it.id == fileName }
                     if (item != null) {
-                        homeViewModel.mockPublish(item)
+                        // 2. Обновляем статус и ссылку
+                        homeViewModel.onPublishedSuccess(item, url)
                     }
+                    // 3. Возвращаемся на Главный экран
                     navController.popBackStack(Screen.Home.route, inclusive = false)
                 },
                 onDeleted = {
@@ -159,7 +162,7 @@ fun AppNavigation() {
             )
         }
 
-        // --- НАСТРОЙКИ КЛЮЧЕЙ (НОВОЕ) ---
+        // --- НАСТРОЙКИ КЛЮЧЕЙ ---
         composable(
             route = Screen.ApiKeySettings.route,
             arguments = listOf(navArgument("serviceType") { type = NavType.StringType })
