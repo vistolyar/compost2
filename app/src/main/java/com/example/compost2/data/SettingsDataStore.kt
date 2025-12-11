@@ -9,33 +9,44 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-// Расширение для создания единственного экземпляра DataStore
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 class SettingsDataStore(private val context: Context) {
 
     companion object {
         val OPENAI_KEY = stringPreferencesKey("openai_key")
-        val WORDPRESS_KEY = stringPreferencesKey("wordpress_key")
+        val WP_URL = stringPreferencesKey("wp_url")
+        val WP_USERNAME = stringPreferencesKey("wp_username")
+        val WP_PASSWORD = stringPreferencesKey("wordpress_key") // Это Application Password
     }
 
-    // Чтение (Flow - поток данных, обновляется сам при изменении)
+    // --- OpenAI ---
     val openAiKey: Flow<String?> = context.dataStore.data
         .map { preferences -> preferences[OPENAI_KEY] }
 
-    val wordPressKey: Flow<String?> = context.dataStore.data
-        .map { preferences -> preferences[WORDPRESS_KEY] }
-
-    // Запись
     suspend fun saveOpenAiKey(key: String) {
         context.dataStore.edit { preferences ->
             preferences[OPENAI_KEY] = key
         }
     }
 
-    suspend fun saveWordPressKey(key: String) {
+    // --- WordPress (Три поля) ---
+    val wpUrl: Flow<String?> = context.dataStore.data
+        .map { preferences -> preferences[WP_URL] }
+
+    val wpUsername: Flow<String?> = context.dataStore.data
+        .map { preferences -> preferences[WP_USERNAME] }
+
+    // Вот переменная, которую мы будем использовать (вместо wordPressKey)
+    val wpPassword: Flow<String?> = context.dataStore.data
+        .map { preferences -> preferences[WP_PASSWORD] }
+
+    suspend fun saveWordPressSettings(url: String, username: String, password: String) {
         context.dataStore.edit { preferences ->
-            preferences[WORDPRESS_KEY] = key
+            val cleanUrl = if (url.endsWith("/")) url.dropLast(1) else url
+            preferences[WP_URL] = cleanUrl
+            preferences[WP_USERNAME] = username
+            preferences[WP_PASSWORD] = password
         }
     }
 }

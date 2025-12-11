@@ -1,14 +1,14 @@
 package com.example.compost2.ui.screens
 
 import android.widget.Toast
-import androidx.compose.foundation.clickable // ДОБАВЛЕНО
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width // ДОБАВЛЕНО
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Save
@@ -46,18 +46,26 @@ fun ApiKeyScreen(
     val scope = rememberCoroutineScope()
     val dataStore = remember { SettingsDataStore(context) }
 
-    var apiKey by remember { mutableStateOf("") }
-    var isVisible by remember { mutableStateOf(false) }
+    // Состояния
+    var openAiKey by remember { mutableStateOf("") }
+    var wpUrl by remember { mutableStateOf("") }
+    var wpUsername by remember { mutableStateOf("") }
+    var wpPassword by remember { mutableStateOf("") }
 
-    val title = if (serviceType == "openai") "OpenAI API Key" else "WordPress Key"
+    var isPasswordVisible by remember { mutableStateOf(false) }
 
+    val title = if (serviceType == "openai") "OpenAI Settings" else "WordPress Settings"
+
+    // Загрузка данных
     LaunchedEffect(Unit) {
-        val savedKey = if (serviceType == "openai") {
-            dataStore.openAiKey.first()
+        if (serviceType == "openai") {
+            openAiKey = dataStore.openAiKey.first() ?: ""
         } else {
-            dataStore.wordPressKey.first()
+            // Читаем правильные поля из DataStore
+            wpUrl = dataStore.wpUrl.first() ?: ""
+            wpUsername = dataStore.wpUsername.first() ?: ""
+            wpPassword = dataStore.wpPassword.first() ?: ""
         }
-        apiKey = savedKey ?: ""
     }
 
     Scaffold(
@@ -78,26 +86,70 @@ fun ApiKeyScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            Text("Enter your $title below. It will be stored securely on your device.")
 
-            Spacer(modifier = Modifier.height(16.dp))
+            if (serviceType == "openai") {
+                // --- OPEN AI ---
+                Text("Enter your OpenAI API Key (sk-...).")
+                Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedTextField(
-                value = apiKey,
-                onValueChange = { apiKey = it },
-                label = { Text("API Key") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                visualTransformation = if (isVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    Text(
-                        text = if (isVisible) "Hide" else "Show",
-                        modifier = Modifier
-                            .clickable { isVisible = !isVisible }
-                            .padding(8.dp)
-                    )
-                }
-            )
+                OutlinedTextField(
+                    value = openAiKey,
+                    onValueChange = { openAiKey = it },
+                    label = { Text("API Key") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        Text(
+                            text = if (isPasswordVisible) "Hide" else "Show",
+                            modifier = Modifier
+                                .clickable { isPasswordVisible = !isPasswordVisible }
+                                .padding(8.dp)
+                        )
+                    }
+                )
+            } else {
+                // --- WORDPRESS ---
+                Text("Enter your WordPress site details.")
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = wpUrl,
+                    onValueChange = { wpUrl = it },
+                    label = { Text("Site URL (https://...)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = wpUsername,
+                    onValueChange = { wpUsername = it },
+                    label = { Text("Username") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = wpPassword,
+                    onValueChange = { wpPassword = it },
+                    label = { Text("Application Password") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        Text(
+                            text = if (isPasswordVisible) "Hide" else "Show",
+                            modifier = Modifier
+                                .clickable { isPasswordVisible = !isPasswordVisible }
+                                .padding(8.dp)
+                        )
+                    }
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -105,11 +157,12 @@ fun ApiKeyScreen(
                 onClick = {
                     scope.launch {
                         if (serviceType == "openai") {
-                            dataStore.saveOpenAiKey(apiKey)
+                            dataStore.saveOpenAiKey(openAiKey)
                         } else {
-                            dataStore.saveWordPressKey(apiKey)
+                            // ИСПРАВЛЕНО: Вызываем правильный метод с 3 аргументами
+                            dataStore.saveWordPressSettings(wpUrl, wpUsername, wpPassword)
                         }
-                        Toast.makeText(context, "Key Saved!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Settings Saved!", Toast.LENGTH_SHORT).show()
                         onNavigateBack()
                     }
                 },
@@ -117,7 +170,7 @@ fun ApiKeyScreen(
             ) {
                 Icon(Icons.Default.Save, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Save Key")
+                Text("Save Settings")
             }
         }
     }
