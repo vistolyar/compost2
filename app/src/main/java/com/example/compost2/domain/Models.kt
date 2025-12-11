@@ -1,10 +1,7 @@
 package com.example.compost2.domain
 
 enum class RecordingStatus {
-    SAVED,      // 1. Просто запись
-    PROCESSING, // 2. В обработке
-    READY,      // 3. Готово (текст получен, можно править)
-    PUBLISHED   // 4. Опубликовано
+    SAVED, PROCESSING, READY, PUBLISHED
 }
 
 data class RecordingItem(
@@ -13,9 +10,10 @@ data class RecordingItem(
     val status: RecordingStatus,
     val filePath: String,
     val articleTitle: String? = null,
-    val articleContent: String? = null, // НОВОЕ ПОЛЕ: Текст статьи
+    val articleContent: String? = null,
     val promptName: String? = null,
-    val publicUrl: String? = null
+    val publicUrl: String? = null,
+    val wordpressId: Int? = null // НОВОЕ ПОЛЕ: ID поста в WordPress
 )
 
 data class PromptItem(

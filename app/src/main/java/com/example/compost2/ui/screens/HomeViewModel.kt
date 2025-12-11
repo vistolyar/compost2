@@ -6,16 +6,23 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.example.compost2.data.SettingsDataStore
 import com.example.compost2.domain.RecordingItem
 import com.example.compost2.domain.RecordingStatus
 import com.google.gson.Gson
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
 
 class HomeViewModel(private val context: Context) : ViewModel() {
+
+    private val dataStore = SettingsDataStore(context)
+    private val gson = Gson()
 
     var recordings by mutableStateOf<List<RecordingItem>>(emptyList())
         private set
@@ -26,7 +33,21 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     var isRefreshing by mutableStateOf(false)
         private set
 
-    private val gson = Gson()
+    var isDarkTheme by mutableStateOf(false)
+        private set
+
+    init {
+        viewModelScope.launch {
+            isDarkTheme = dataStore.isDarkTheme.first() ?: false
+        }
+    }
+
+    fun toggleTheme() {
+        isDarkTheme = !isDarkTheme
+        viewModelScope.launch {
+            dataStore.saveTheme(isDarkTheme)
+        }
+    }
 
     fun loadRecordings() {
         val dir = context.cacheDir
@@ -38,22 +59,18 @@ class HomeViewModel(private val context: Context) : ViewModel() {
         val currentItemsMap = recordings.associateBy { it.id }
 
         recordings = sortedFiles.map { file ->
-            // Проверяем наличие sidecar-файла с метаданными (.json)
             val metaFile = File(file.path + ".json")
             if (metaFile.exists()) {
                 try {
                     val reader = FileReader(metaFile)
                     val savedItem = gson.fromJson(reader, RecordingItem::class.java)
                     reader.close()
-                    // Обновляем путь к файлу (на случай перемещения), остальное берем из JSON
                     savedItem.copy(filePath = file.absolutePath)
                 } catch (e: Exception) {
                     e.printStackTrace()
                     createDefaultItem(file)
                 }
             } else {
-                // Если метаданных нет (новая запись или удален json), создаем дефолтную
-                // Но если объект уже был в памяти с таким ID, можно попытаться оставить его
                 val existingItem = currentItemsMap[file.name]
                 existingItem?.copy(filePath = file.absolutePath) ?: createDefaultItem(file)
             }
@@ -69,8 +86,7 @@ class HomeViewModel(private val context: Context) : ViewModel() {
         )
     }
 
-    // --- Обновление данных (Редактор) ---
-
+    // --- Обновление данных из Редактора ---
     fun updateArticleData(id: String, title: String, content: String) {
         val index = recordings.indexOfFirst { it.id == id }
         if (index != -1) {
@@ -78,15 +94,13 @@ class HomeViewModel(private val context: Context) : ViewModel() {
             val newItem = oldItem.copy(
                 articleTitle = title,
                 articleContent = content,
-                // Если редактируем, то статус как минимум READY
                 status = if (oldItem.status == RecordingStatus.SAVED) RecordingStatus.READY else oldItem.status
             )
             updateItemInList(newItem)
         }
     }
 
-    // --- Результаты от AI ---
-
+    // --- Результат от AI ---
     fun onAiResultReceived(item: RecordingItem, title: String, content: String) {
         val newItem = item.copy(
             status = RecordingStatus.READY,
@@ -96,27 +110,17 @@ class HomeViewModel(private val context: Context) : ViewModel() {
         updateItemInList(newItem)
     }
 
-    // --- Результат Публикации (WordPress) ---
-
-    fun onPublishedSuccess(item: RecordingItem, url: String) {
+    // --- Успешная публикация (Обновлено с ID) ---
+    fun onPublishedSuccess(item: RecordingItem, url: String, wpId: Int) {
         val newItem = item.copy(
             status = RecordingStatus.PUBLISHED,
-            publicUrl = url
+            publicUrl = url,
+            wordpressId = wpId // Сохраняем ID, чтобы потом делать Update
         )
         updateItemInList(newItem)
     }
 
-    // --- Управление статусами ---
-
-    fun sendToSTT(item: RecordingItem) {
-        updateItemStatus(item, RecordingStatus.PROCESSING)
-    }
-
-    fun cancelProcessing(item: RecordingItem) {
-        updateItemStatus(item, RecordingStatus.SAVED)
-    }
-
-    // Симуляция (можно оставить для тестов)
+    // --- Симуляция (для тестов, если нужно) ---
     fun mockFinishProcessing(item: RecordingItem) {
         val newItem = item.copy(
             status = RecordingStatus.READY,
@@ -127,11 +131,17 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     }
 
     fun mockPublish(item: RecordingItem) {
-        val newItem = item.copy(
-            status = RecordingStatus.PUBLISHED,
-            publicUrl = "https://wordpress.com/post/123"
-        )
-        updateItemInList(newItem)
+        // Устаревшая заглушка
+        updateItemInList(item.copy(status = RecordingStatus.PUBLISHED))
+    }
+
+    // --- Статусы ---
+    fun sendToSTT(item: RecordingItem) {
+        updateItemStatus(item, RecordingStatus.PROCESSING)
+    }
+
+    fun cancelProcessing(item: RecordingItem) {
+        updateItemStatus(item, RecordingStatus.SAVED)
     }
 
     private fun updateItemStatus(item: RecordingItem, newStatus: RecordingStatus) {
@@ -139,13 +149,10 @@ class HomeViewModel(private val context: Context) : ViewModel() {
         updateItemInList(newItem)
     }
 
-    // Централизованный метод обновления списка и сохранения на диск
     private fun updateItemInList(newItem: RecordingItem) {
-        // 1. Обновляем память (UI)
         recordings = recordings.map {
             if (it.id == newItem.id) newItem else it
         }
-        // 2. Сохраняем на диск (JSON)
         saveMetadataToDisk(newItem)
     }
 
@@ -161,7 +168,6 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     }
 
     // --- Удаление ---
-
     fun refresh() {
         isRefreshing = true
         loadRecordings()
@@ -174,11 +180,9 @@ class HomeViewModel(private val context: Context) : ViewModel() {
 
     fun confirmDelete() {
         itemToDelete?.let { item ->
-            // Удаляем аудио
             val file = File(item.filePath)
             if (file.exists()) file.delete()
 
-            // Удаляем метаданные
             val metaFile = File(item.filePath + ".json")
             if (metaFile.exists()) metaFile.delete()
 

@@ -20,7 +20,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit // ВОТ ЭТОТ ИМПОРТ БЫЛ НУЖЕН
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Publish
+import androidx.compose.material.icons.filled.Update
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -32,6 +36,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -55,7 +61,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 fun PublicationScreen(
     fileName: String,
     onNavigateBack: () -> Unit,
-    onPublished: (String) -> Unit, // Колбэк успеха с ссылкой
+    onPublished: (String, Int) -> Unit, // Возвращаем URL и ID
     onDeleted: () -> Unit
 ) {
     val context = LocalContext.current
@@ -66,11 +72,12 @@ fun PublicationScreen(
         viewModel.loadData(fileName)
     }
 
-    // Следим за успехом публикации
     LaunchedEffect(viewModel.isSuccess) {
         if (viewModel.isSuccess) {
             viewModel.publishedUrl?.let { url ->
-                onPublished(url)
+                viewModel.publishedId?.let { id ->
+                    onPublished(url, id)
+                }
             }
         }
     }
@@ -78,23 +85,10 @@ fun PublicationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Publish to WordPress") },
+                title = { Text(if (viewModel.publishedId != null) "Manage Post" else "Publish Article") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    // Save Draft (как черновик)
-                    TextButton(
-                        onClick = { viewModel.publishPost(status = "draft") },
-                        enabled = !viewModel.isPublishing
-                    ) {
-                        if (viewModel.isPublishing) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        } else {
-                            Text("Save Draft", fontWeight = FontWeight.Bold)
-                        }
                     }
                 }
             )
@@ -115,22 +109,22 @@ fun PublicationScreen(
                         elevation = ButtonDefaults.buttonElevation(0.dp)
                     ) {
                         Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Delete", color = MaterialTheme.colorScheme.onErrorContainer)
                     }
 
-                    // Publish (публикация)
+                    // Кнопка действия (Создать или Обновить)
                     Button(
-                        onClick = { viewModel.publishPost(status = "publish") },
+                        onClick = { viewModel.submitPost() },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
-                        enabled = !viewModel.isPublishing
+                        enabled = !viewModel.isPublishing,
+                        modifier = Modifier.weight(1f).padding(start = 16.dp)
                     ) {
                         if (viewModel.isPublishing) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
                         } else {
-                            Icon(Icons.Default.Publish, null)
+                            val isUpdate = viewModel.publishedId != null
+                            Icon(if (isUpdate) Icons.Default.Update else Icons.Default.Publish, null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Publish")
+                            Text(if (isUpdate) "Update Post" else "Publish")
                         }
                     }
                 }
@@ -144,18 +138,49 @@ fun PublicationScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Заголовок статьи
-            Text("Article Title:", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+            // Заголовок
+            Text("Article:", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
             Text(
                 text = viewModel.recordingItem?.articleTitle ?: "Loading...",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 24.dp)
+                modifier = Modifier.padding(bottom = 16.dp)
             )
+
+            Divider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // --- ВЫБОР СТАТУСА ---
+            Text("Status:", style = MaterialTheme.typography.titleMedium)
+            StatusOption(
+                label = "Publish (Public)",
+                value = "publish",
+                current = viewModel.selectedStatus,
+                icon = Icons.Default.Public,
+                onSelect = { viewModel.setStatus(it) }
+            )
+            StatusOption(
+                label = "Draft (Hidden)",
+                value = "draft",
+                current = viewModel.selectedStatus,
+                icon = Icons.Default.Edit,
+                onSelect = { viewModel.setStatus(it) }
+            )
+            StatusOption(
+                label = "Private (Only me)",
+                value = "private",
+                current = viewModel.selectedStatus,
+                icon = Icons.Default.VisibilityOff,
+                onSelect = { viewModel.setStatus(it) }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Divider()
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Список категорий
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Select Categories:", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text("Categories:", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 if (viewModel.isLoading) {
                     CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                 }
@@ -170,7 +195,7 @@ fun PublicationScreen(
                 LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
                     if (viewModel.categories.isEmpty() && !viewModel.isLoading) {
                         item {
-                            Text("No categories found. Check internet or WP settings.", modifier = Modifier.padding(16.dp), color = Color.Gray)
+                            Text("No categories found.", modifier = Modifier.padding(16.dp), color = Color.Gray)
                         }
                     }
 
@@ -200,12 +225,11 @@ fun PublicationScreen(
         }
     }
 
-    // Диалог удаления
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Delete Draft?") },
-            text = { Text("This will permanently delete the local recording. This action cannot be undone.") },
+            title = { Text("Delete Data?") },
+            text = { Text("This will remove the recording from your phone. It will NOT delete the post from WordPress.") },
             confirmButton = {
                 TextButton(onClick = {
                     showDeleteDialog = false
@@ -215,10 +239,33 @@ fun PublicationScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
             }
         )
+    }
+}
+
+@Composable
+fun StatusOption(
+    label: String,
+    value: String,
+    current: String,
+    icon: ImageVector,
+    onSelect: (String) -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect(value) }
+            .padding(vertical = 4.dp)
+    ) {
+        RadioButton(
+            selected = (value == current),
+            onClick = { onSelect(value) }
+        )
+        Icon(icon, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(20.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(text = label, style = MaterialTheme.typography.bodyMedium)
     }
 }

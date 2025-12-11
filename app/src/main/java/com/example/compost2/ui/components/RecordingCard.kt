@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Close // ИСПОЛЬЗУЕМ КРЕСТИК
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
@@ -67,7 +67,8 @@ fun RecordingCard(
     onCancel: () -> Unit,
     onDelete: () -> Unit,
     onPublish: () -> Unit,
-    onOpenUrl: (String) -> Unit
+    onOpenUrl: (String) -> Unit,
+    onSettings: () -> Unit // НОВЫЙ КОЛБЭК
 ) {
     var showMenu by remember { mutableStateOf(false) }
 
@@ -112,7 +113,7 @@ fun RecordingCard(
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
-                            Icon(Icons.Filled.Close, contentDescription = null) // КРЕСТИК
+                            Icon(Icons.Filled.Close, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Cancel")
                         }
@@ -151,7 +152,7 @@ fun RecordingCard(
                 onPlay = { showMenu = false; onClick() },
                 onCancel = { showMenu = false; onCancel() },
                 onEdit = { showMenu = false; onClick() },
-                onSettings = { showMenu = false; },
+                onSettings = { showMenu = false; onSettings() }, // ВЫЗЫВАЕМ НОВЫЙ КОЛБЭК
                 onDelete = { showMenu = false; onDelete() }
             )
         }
@@ -313,7 +314,7 @@ fun CardContextMenu(
                 DropdownMenuItem(
                     text = { Text("Cancel") },
                     onClick = onCancel,
-                    leadingIcon = { Icon(Icons.Filled.Close, null) } // КРЕСТИК
+                    leadingIcon = { Icon(Icons.Filled.Close, null) }
                 )
             }
             RecordingStatus.READY -> {
@@ -329,8 +330,9 @@ fun CardContextMenu(
                     onClick = onEdit,
                     leadingIcon = { Icon(Icons.Filled.Edit, null) }
                 )
+                // ИЗМЕНЕНО: Новое название и иконка
                 DropdownMenuItem(
-                    text = { Text("Settings") },
+                    text = { Text("Publication settings") },
                     onClick = onSettings,
                     leadingIcon = { Icon(Icons.Filled.Settings, null) }
                 )

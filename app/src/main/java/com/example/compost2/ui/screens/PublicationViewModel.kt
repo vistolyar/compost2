@@ -29,23 +29,24 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
     var recordingItem by mutableStateOf<RecordingItem?>(null)
         private set
 
-    // Список рубрик с сайта
     var categories by mutableStateOf<List<WpCategory>>(emptyList())
         private set
 
-    // Выбранные рубрики (ID)
     var selectedCategoryIds by mutableStateOf(setOf<Int>())
         private set
+
+    // Выбранный статус публикации
+    // Варианты WP: 'publish', 'draft', 'private', 'pending'
+    var selectedStatus by mutableStateOf("publish")
 
     var isLoading by mutableStateOf(false)
     var isPublishing by mutableStateOf(false)
 
-    // Ссылка на опубликованную статью
     var publishedUrl: String? = null
+    var publishedId: Int? = null // ID опубликованного поста
     var isSuccess by mutableStateOf(false)
 
     fun loadData(fileName: String) {
-        // 1. Загружаем данные статьи из локального JSON
         val file = File(context.cacheDir, fileName)
         if (file.exists()) {
             val metaFile = File(file.path + ".json")
@@ -55,13 +56,17 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
                     val item = gson.fromJson(reader, RecordingItem::class.java)
                     reader.close()
                     recordingItem = item.copy(filePath = file.absolutePath)
+
+                    // Если пост уже был опубликован, выставляем его ID
+                    publishedId = item.wordpressId
+
+                    // Если мы пришли редактировать, статус по умолчанию берем из логики?
+                    // Пока оставим по умолчанию 'publish', но можно усложнить
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
             }
         }
-
-        // 2. Загружаем рубрики с сайта
         fetchCategories()
     }
 
@@ -69,7 +74,6 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
         isLoading = true
         viewModelScope.launch {
             try {
-                // Читаем настройки
                 val url = dataStore.wpUrl.first() ?: ""
                 val username = dataStore.wpUsername.first() ?: ""
                 val password = dataStore.wpPassword.first() ?: ""
@@ -80,7 +84,7 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(context, "Failed to load categories: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Failed to load categories", Toast.LENGTH_SHORT).show()
             } finally {
                 isLoading = false
             }
@@ -95,7 +99,12 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    fun publishPost(status: String = "publish") { // "publish" или "draft"
+    fun setStatus(status: String) {
+        selectedStatus = status
+    }
+
+    // Главный метод: Создать или Обновить
+    fun submitPost() {
         val item = recordingItem ?: return
         if (isPublishing) return
 
@@ -107,28 +116,38 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
                 val password = dataStore.wpPassword.first() ?: ""
 
                 if (url.isBlank() || password.isBlank()) {
-                    Toast.makeText(context, "WP Settings missing!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Check WP Settings!", Toast.LENGTH_SHORT).show()
                     return@launch
                 }
 
                 val api = WpClient.create(url, username, password)
 
                 val request = WpPostRequest(
-                    title = item.articleTitle ?: "New Article",
+                    title = item.articleTitle ?: "Untitled",
                     content = item.articleContent ?: "",
-                    status = status,
+                    status = selectedStatus, // Используем выбранный статус
                     categories = selectedCategoryIds.toList()
                 )
 
-                val response = api.createPost(request)
+                // ЛОГИКА ВЫБОРА: CREATE vs UPDATE
+                val response = if (publishedId != null) {
+                    // Если ID есть - обновляем
+                    api.updatePost(publishedId!!, request)
+                } else {
+                    // Если ID нет - создаем
+                    api.createPost(request)
+                }
 
                 publishedUrl = response.link
+                publishedId = response.id // Обновляем ID (на случай если это было создание)
+
                 isSuccess = true
-                Toast.makeText(context, "Success! Post ID: ${response.id}", Toast.LENGTH_SHORT).show()
+                val action = if (publishedId == item.wordpressId) "Updated" else "Published"
+                Toast.makeText(context, "$action successfully!", Toast.LENGTH_SHORT).show()
 
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(context, "Publish Error: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 isPublishing = false
             }

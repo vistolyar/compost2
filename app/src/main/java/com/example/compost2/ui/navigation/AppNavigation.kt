@@ -25,7 +25,6 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val context = LocalContext.current
 
-    // Общая ViewModel (Мозг приложения)
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.provideFactory(context))
 
     NavHost(navController = navController, startDestination = Screen.Home.route) {
@@ -44,7 +43,6 @@ fun AppNavigation() {
                     navController.navigate(Screen.SendToSTT.createRoute(fileName))
                 },
                 onNavigateToPublish = { fileName ->
-                    // Переход в редактор для проверки перед публикацией
                     navController.navigate(Screen.Editor.createRoute(fileName))
                 },
                 onNavigateToPrompts = {
@@ -141,14 +139,12 @@ fun AppNavigation() {
             PublicationScreen(
                 fileName = fileName,
                 onNavigateBack = { navController.popBackStack() },
-                onPublished = { url ->
-                    // 1. Находим запись
+                onPublished = { url, wpId -> // Получаем и URL, и ID
                     val item = homeViewModel.recordings.find { it.id == fileName }
                     if (item != null) {
-                        // 2. Обновляем статус и ссылку
-                        homeViewModel.onPublishedSuccess(item, url)
+                        // Сохраняем всё в общий список и на диск
+                        homeViewModel.onPublishedSuccess(item, url, wpId)
                     }
-                    // 3. Возвращаемся на Главный экран
                     navController.popBackStack(Screen.Home.route, inclusive = false)
                 },
                 onDeleted = {

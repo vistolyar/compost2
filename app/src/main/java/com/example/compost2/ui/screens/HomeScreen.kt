@@ -16,7 +16,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.UploadFile
@@ -76,7 +75,6 @@ fun HomeScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Авто-обновление списка при возврате на экран
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
@@ -95,7 +93,6 @@ fun HomeScreen(
     val sheetState = rememberModalBottomSheetState()
     val pullRefreshState = rememberPullToRefreshState()
 
-    // Логика Pull-to-Refresh
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(true) {
             delay(1000)
@@ -104,12 +101,10 @@ fun HomeScreen(
         }
     }
 
-    // Первичная загрузка
     LaunchedEffect(Unit) {
         viewModel.loadRecordings()
     }
 
-    // Диалог удаления записи
     if (viewModel.itemToDelete != null) {
         AlertDialog(
             onDismissRequest = { viewModel.cancelDelete() },
@@ -135,7 +130,6 @@ fun HomeScreen(
                 Text("ComPost Menu", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineSmall)
                 Divider()
 
-                // Пункт меню "Prompts" (бывший Prompt Settings)
                 NavigationDrawerItem(
                     label = { Text("Prompts") },
                     selected = false,
@@ -146,24 +140,23 @@ fun HomeScreen(
                     }
                 )
 
-                // Заглушки для темы и языка
+                // Кнопка темы теперь работает
                 NavigationDrawerItem(
-                    label = { Text("Theme: Light/Dark") },
+                    label = { Text(if (viewModel.isDarkTheme) "Theme: Dark" else "Theme: Light") },
                     selected = false,
                     icon = { Icon(Icons.Default.DarkMode, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() } }
+                    onClick = {
+                        viewModel.toggleTheme()
+                        // Можно закрыть меню, можно оставить открытым, чтобы видеть эффект
+                        // scope.launch { drawerState.close() }
+                    }
                 )
-                NavigationDrawerItem(
-                    label = { Text("Language") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Language, contentDescription = null) },
-                    onClick = { scope.launch { drawerState.close() } }
-                )
+
+                // Кнопка Language УДАЛЕНА
 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 Text("Integrations", modifier = Modifier.padding(start = 16.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
 
-                // Настройки API ключей
                 NavigationDrawerItem(
                     label = { Text("OpenAI API Key") },
                     selected = false,
@@ -246,7 +239,9 @@ fun HomeScreen(
                             onOpenUrl = { url ->
                                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                                 context.startActivity(intent)
-                            }
+                            },
+                            // НОВЫЙ ПАРАМЕТР: Переход к настройкам публикации
+                            onSettings = { onNavigateToPublish(item.id) }
                         )
                     }
                 }
