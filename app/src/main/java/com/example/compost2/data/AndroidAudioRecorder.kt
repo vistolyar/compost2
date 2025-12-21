@@ -27,6 +27,14 @@ class AndroidAudioRecorder(
             setAudioSource(MediaRecorder.AudioSource.MIC)
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+
+            // --- НАСТРОЙКИ ДЛЯ VERCEL (СЖАТИЕ) ---
+            // 64 kbps (64000) - оптимально для голоса, размер файла маленький
+            setAudioEncodingBitRate(64000)
+            // 16 kHz (16000) - родная частота для Whisper, экономит место
+            setAudioSamplingRate(16000)
+            // -------------------------------------
+
             setOutputFile(FileOutputStream(outputFile).fd)
 
             prepare()
@@ -36,31 +44,29 @@ class AndroidAudioRecorder(
         }
     }
 
-    override fun pause() {
-        // Метод pause доступен с API 24 (Android 7.0), у нас MinSdk 26, так что безопасно
-        recorder?.pause()
-    }
-
-    override fun resume() {
-        recorder?.resume()
-    }
-
     override fun stop() {
         try {
             recorder?.stop()
         } catch (e: Exception) {
-            // Иногда stop() может упасть, если запись была слишком короткой, игнорируем
             e.printStackTrace()
         }
         recorder?.reset()
         recorder = null
     }
 
-    override fun getAmplitude(): Int {
-        return try {
-            recorder?.maxAmplitude ?: 0
-        } catch (e: Exception) {
-            0
+    override fun pause() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            recorder?.pause()
         }
+    }
+
+    override fun resume() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            recorder?.resume()
+        }
+    }
+
+    override fun getAmplitude(): Int {
+        return recorder?.maxAmplitude ?: 0
     }
 }
