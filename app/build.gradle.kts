@@ -9,7 +9,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.compost2"
+        applicationId = "com.example.compost2.dod"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
