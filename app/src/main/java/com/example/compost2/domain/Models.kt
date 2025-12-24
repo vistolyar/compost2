@@ -13,7 +13,7 @@ data class RecordingItem(
     val articleContent: String? = null,
     val promptName: String? = null,
     val publicUrl: String? = null,
-    val wordpressId: Int? = null // НОВОЕ ПОЛЕ: ID поста в WordPress
+    val wordpressId: Int? = null
 )
 
 data class PromptItem(
@@ -21,5 +21,6 @@ data class PromptItem(
     val title: String,
     val content: String,
     val isDraft: Boolean = false,
-    val lastModified: String
+    val lastModified: String,
+    val position: Int = 0 // НОВОЕ ПОЛЕ: Позиция (0-11 для додекаэдра)
 )

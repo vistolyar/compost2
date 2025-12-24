@@ -16,11 +16,19 @@ class PromptsRepository(private val context: Context) {
 
     fun getPrompts(): List<PromptItem> {
         if (!file.exists()) {
-            // Если файла нет, создаем дефолтные промпты
             val defaults = listOf(
-                PromptItem("1", "Default Transcriber", "Just transcribe the audio exactly as is.", false, "System"),
-                PromptItem("2", "Blog Post", "Write a structured blog post based on this transcript.", false, "System"),
-                PromptItem("3", "Summary", "Create a bullet-point summary.", false, "System")
+                PromptItem("1", "Default Transcriber", "Just transcribe exactly.", false, "System", 0),
+                PromptItem("2", "Jira Task", "Create a structured Jira task.", false, "System", 1),
+                PromptItem("3", "Email to Boss", "Write a formal email.", false, "System", 2),
+                PromptItem("4", "Summary", "Make a short summary.", false, "System", 3),
+                PromptItem("5", "Blog Post", "Write a WordPress post.", false, "System", 4),
+                PromptItem("6", "LinkedIn", "Punchy post with emojis.", false, "System", 5),
+                PromptItem("7", "Action Items", "Extract a to-do list.", false, "System", 6),
+                PromptItem("8", "Grammar Fix", "Just fix mistakes.", false, "System", 7),
+                PromptItem("9", "Code helper", "Extract code or logic.", false, "System", 8),
+                PromptItem("10", "Translate", "Translate to English.", false, "System", 9),
+                PromptItem("11", "Ideas", "Brainstorm 5 more ideas.", false, "System", 10),
+                PromptItem("12", "Transcription", "Raw text only.", false, "System", 11)
             )
             savePrompts(defaults)
             return defaults
@@ -31,7 +39,8 @@ class PromptsRepository(private val context: Context) {
             val type = object : TypeToken<List<PromptItem>>() {}.type
             val list: List<PromptItem> = gson.fromJson(reader, type)
             reader.close()
-            list
+            // СОРТИРОВКА ПО ПОЗИЦИИ
+            list.sortedBy { it.position }
         } catch (e: Exception) {
             e.printStackTrace()
             emptyList()
@@ -50,7 +59,7 @@ class PromptsRepository(private val context: Context) {
 
     fun addPrompt(prompt: PromptItem) {
         val current = getPrompts().toMutableList()
-        current.add(0, prompt) // Добавляем в начало
+        current.add(prompt)
         savePrompts(current)
     }
 
