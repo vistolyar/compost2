@@ -1,5 +1,7 @@
 package com.example.compost2.ui.navigation
 
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -25,12 +27,21 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val context = LocalContext.current
 
+    // Создаем ViewModel здесь, так как изменения в MainActivity не применялись
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.provideFactory(context))
 
     NavHost(navController = navController, startDestination = Screen.Home.route) {
 
-        // --- ГЛАВНЫЙ ЭКРАН ---
-        composable(Screen.Home.route) {
+        // --- ГЛАВНЫЙ ЭКРАН (С АНИМАЦИЕЙ) ---
+        composable(
+            route = Screen.Home.route,
+            enterTransition = {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(400))
+            },
+            exitTransition = {
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(400))
+            }
+        ) {
             HomeScreen(
                 viewModel = homeViewModel,
                 onNavigateToRecorder = {
@@ -54,8 +65,16 @@ fun AppNavigation() {
             )
         }
 
-        // --- ЗАПИСЬ ---
-        composable(Screen.Recorder.route) {
+        // --- ЗАПИСЬ (С АНИМАЦИЕЙ) ---
+        composable(
+            route = Screen.Recorder.route,
+            enterTransition = {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(400))
+            },
+            exitTransition = {
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(400))
+            }
+        ) {
             RecorderScreen(
                 onNavigateToHome = {
                     navController.popBackStack(Screen.Home.route, inclusive = false)
@@ -139,10 +158,9 @@ fun AppNavigation() {
             PublicationScreen(
                 fileName = fileName,
                 onNavigateBack = { navController.popBackStack() },
-                onPublished = { url, wpId -> // Получаем и URL, и ID
+                onPublished = { url, wpId ->
                     val item = homeViewModel.recordings.find { it.id == fileName }
                     if (item != null) {
-                        // Сохраняем всё в общий список и на диск
                         homeViewModel.onPublishedSuccess(item, url, wpId)
                     }
                     navController.popBackStack(Screen.Home.route, inclusive = false)

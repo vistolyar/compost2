@@ -2,6 +2,7 @@ package com.example.compost2.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
@@ -125,12 +127,30 @@ fun HomeScreen(
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = { showBottomSheet = true }) {
+                FloatingActionButton(onClick = {
+                    // ДУБЛИРУЕМ ФУНКЦИОНАЛ: Кнопка "+" теперь сразу ведет в рекордер
+                    onNavigateToRecorder()
+                }) {
                     Icon(Icons.Default.Add, null)
                 }
             }
         ) { paddingValues ->
-            Box(modifier = Modifier.fillMaxSize().padding(paddingValues).nestedScroll(pullRefreshState.nestedScrollConnection)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .nestedScroll(pullRefreshState.nestedScrollConnection)
+                    // ДОБАВЛЕН СВАЙП ВЛЕВО
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures { change, dragAmount ->
+                            change.consume()
+                            // Если свайп влево и он достаточно сильный
+                            if (dragAmount < -20) {
+                                onNavigateToRecorder()
+                            }
+                        }
+                    }
+            ) {
                 LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
                     if (!pullRefreshState.isRefreshing && viewModel.recordings.isEmpty()) {
                         item {
