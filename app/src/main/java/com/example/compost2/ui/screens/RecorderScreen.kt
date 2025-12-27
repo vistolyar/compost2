@@ -1,138 +1,124 @@
 package com.example.compost2.ui.screens
 
 import android.Manifest
+import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.compost2.ui.components.ActionLensButton
 
 @Composable
 fun RecorderScreen(onNavigateToHome: () -> Unit) {
     val context = LocalContext.current
     val viewModel: RecorderViewModel = viewModel(factory = RecorderViewModel.provideFactory(context))
 
-    Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Верхняя панель (Таймер и статус)
+    LaunchedEffect(viewModel.isReadyForSTT) {
+        if (viewModel.isReadyForSTT) {
+            onNavigateToHome()
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+        if (isGranted) viewModel.startCapture(context, false)
+    }
+
+    val checkPermissionAndStart = { dictaphone: Boolean ->
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            viewModel.startCapture(context, dictaphone)
+        } else {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
         Column(
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 32.dp),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 60.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = if (viewModel.isRecording) "Запись идет..." else if (viewModel.hasRecordingSession) "На паузе" else "Готов к записи",
-                style = MaterialTheme.typography.titleMedium,
-                color = if (viewModel.isRecording) Color.Red else Color.Gray
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
                 text = viewModel.formattedTime,
-                fontSize = 60.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+                fontSize = 72.sp,
+                fontWeight = FontWeight.W900,
+                color = Color.White
+            )
+            Text(
+                text = if (viewModel.controlState == ActionState.RECORDING) "RECORDING"
+                else if (viewModel.hasRecordingSession) "PAUSED" else "READY",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (viewModel.isRecording) Color.Red else Color.White.copy(alpha = 0.5f),
+                letterSpacing = 4.sp
             )
         }
 
-        // КНОПКА "СТОП" УДАЛЕНА. ВСЁ УПРАВЛЕНИЕ ТЕПЕРЬ ТУТ:
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .size(280.dp), // Сделал чуть крупнее для удобства
+                .size(360.dp)
+                .pointerInput(viewModel.controlState) {
+                    detectTapGestures(
+                        onDoubleTap = {
+                            if (viewModel.controlState == ActionState.RECORDING) {
+                                viewModel.stopForSelection(context)
+                            } else if (viewModel.controlState == ActionState.SELECTION) {
+                                viewModel.startCapture(context, true)
+                            }
+                        },
+                        onTap = {
+                            if (viewModel.controlState != ActionState.SELECTION) {
+                                if (viewModel.isRecording) viewModel.pauseCapture(context)
+                                else checkPermissionAndStart(true)
+                            }
+                        },
+                        onLongPress = {
+                            if (viewModel.controlState != ActionState.SELECTION && !viewModel.isRecording) {
+                                checkPermissionAndStart(false)
+                            }
+                        },
+                        onPress = {
+                            val startTime = System.currentTimeMillis()
+                            tryAwaitRelease()
+                            val duration = System.currentTimeMillis() - startTime
+                            if (duration > 500 && viewModel.isRecording && !viewModel.isDictaphoneMode) {
+                                viewModel.pauseCapture(context)
+                            }
+                        }
+                    )
+                },
             contentAlignment = Alignment.Center
         ) {
-            // Внешнее пульсирующее кольцо (реагирует на звук)
-            val targetScale = if (viewModel.isRecording) {
-                1f + (viewModel.currentAmplitude / 15000f).coerceIn(0f, 0.4f)
-            } else 1f
-            val animScale by animateFloatAsState(targetValue = targetScale, label = "Pulse")
-
-            Box(modifier = Modifier.fillMaxSize().scale(animScale).border(8.dp, Color.Red, CircleShape))
-
-            // Внутренняя кнопка
-            Box(
-                modifier = Modifier
-                    .fillMaxSize(0.85f).clip(CircleShape)
-                    .background(Color.Red.copy(alpha = if (viewModel.isRecording) 0.8f else 0.2f))
-                    .pointerInput(Unit) {
-                        detectTapGestures(
-                            onDoubleTap = {
-                                if (viewModel.hasRecordingSession) {
-                                    viewModel.finalizeRecording(context)
-                                    onNavigateToHome()
-                                }
-                            },
-                            onTap = {
-                                if (viewModel.isRecording) {
-                                    viewModel.pauseCapture(context)
-                                } else {
-                                    // Обычный тап запускает режим "Диктофон" (dictaphone = true)
-                                    viewModel.startCapture(context, true)
-                                }
-                            },
-                            onLongPress = {
-                                if (!viewModel.isRecording) {
-                                    // Длинный тап запускает режим "Рация" (dictaphone = false)
-                                    viewModel.startCapture(context, false)
-                                }
-                            },
-                            onPress = {
-                                val pressStartTime = System.currentTimeMillis()
-                                tryAwaitRelease()
-                                val duration = System.currentTimeMillis() - pressStartTime
-
-                                // Если это была "Рация" (держали > 500мс) - ставим на паузу при отпускании
-                                if (duration > 500 && viewModel.isRecording && !viewModel.isDictaphoneMode) {
-                                    viewModel.pauseCapture(context)
-                                }
-                            }
-                        )
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                // Если на паузе — показываем иконку паузы в центре
-                if (!viewModel.isRecording && viewModel.hasRecordingSession) {
-                    Icon(
-                        imageVector = Icons.Default.Pause,
-                        contentDescription = "Paused",
-                        tint = Color.Red,
-                        modifier = Modifier.size(100.dp)
-                    )
+            ActionLensButton(
+                state = viewModel.controlState,
+                prompts = viewModel.prompts,
+                amplitude = viewModel.currentAmplitude,
+                onResume = { viewModel.startCapture(context, true) },
+                onSelect = { prompt ->
+                    viewModel.onPromptSelected(context, prompt)
                 }
-            }
+            )
         }
 
-        // Инструкция внизу
-        Column(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Double tap to STOP",
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = Color.Red
-            )
-            Text(
-                text = "Hold for Walkie-Talkie, Tap for Dictaphone",
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.Gray
-            )
-        }
+        Text(
+            text = if (viewModel.controlState == ActionState.SELECTION)
+                "CHOOSE ACTION TO FINISH"
+            else "DOUBLE TAP TO OPEN LENS",
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.3f),
+            letterSpacing = 1.sp
+        )
     }
 }
