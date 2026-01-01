@@ -1,4 +1,3 @@
-# Trigger build
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
@@ -8,13 +7,10 @@ import base64
 import re
 from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel
-
-# --- НОВЫЕ ИМПОРТЫ ДЛЯ AWS S3 ---
 import boto3
-from botocore.exceptions import ClientError
 import uuid
-# -------------------------------
 
+# --- НАСТРОЙКИ ---
 app = FastAPI()
 
 app.add_middleware(
@@ -25,22 +21,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- НАСТРОЙКА AWS S3 ---
-# Мы инициализируем клиента один раз при старте
 s3_client = boto3.client(
     's3',
     aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
     aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
-    region_name='eu-north-1' # Твой регион (Стокгольм)
+    region_name='eu-north-1'
 )
 BUCKET_NAME = os.environ.get('AWS_BUCKET_NAME')
-# ------------------------
 
+# --- МОДЕЛИ ДАННЫХ ---
 class AudioRequest(BaseModel):
-    audio_base64: str
     prompt: str
     openai_key: str
+    # Теперь эти поля опциональны: можно прислать ИЛИ ключ, ИЛИ base64
+    file_key: str | None = None
+    audio_base64: str | None = None
 
+# --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 def clean_json_string(text):
     text = text.strip()
     pattern = r"^```(?:json)?\s*(\{.*?\})\s*```$"
@@ -53,15 +50,13 @@ def clean_json_string(text):
 async def ping():
     return {"message": "pong", "status": "ok"}
 
-# --- НОВЫЙ ЭНДПОИНТ (Получение ссылки на загрузку) ---
+# --- ШАГ 1: ПОЛУЧЕНИЕ ССЫЛКИ НА ЗАГРУЗКУ ---
 @app.get("/api/get_upload_url")
 async def get_upload_url():
     try:
-        # 1. Генерируем уникальное имя файла
         file_id = str(uuid.uuid4())
         file_key = f"raw_audio/{file_id}.m4a"
 
-        # 2. Генерируем временную ссылку (Presigned URL)
         presigned_url = s3_client.generate_presigned_url(
             'put_object',
             Params={
@@ -69,98 +64,76 @@ async def get_upload_url():
                 'Key': file_key,
                 'ContentType': 'audio/mp4'
             },
-            ExpiresIn=3600  # Ссылка живет 1 час
+            ExpiresIn=3600
         )
 
-        # 3. Возвращаем результат
         return JSONResponse(content={
             "upload_url": presigned_url,
             "file_key": file_key
         })
-
     except Exception as e:
-        return JSONResponse(
-            content={"error": str(e)}, 
-            status_code=500
-        )
-# -----------------------------------------------------
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
+# --- ШАГ 2: ОБРАБОТКА (ТЕПЕРЬ УМЕЕТ ЧИТАТЬ ИЗ S3) ---
 @app.post("/api/process-audio")
 async def process_audio(request: AudioRequest):
     temp_file_path = None
     try:
         print("1. Request received")
-        
         if not request.openai_key:
-            return Response(content=json.dumps({"error": "OpenAI Key is missing"}), status_code=400, media_type="application/json")
+            return JSONResponse(content={"error": "OpenAI Key missing"}, status_code=400)
             
         client = OpenAI(api_key=request.openai_key)
-
-        # Декодируем Base64
-        try:
-            print("2. Decoding Base64...")
-            # Удаляем возможные переносы строк, которые могут прийти с Android
-            clean_base64 = request.audio_base64.replace("\n", "").replace("\r", "")
-            audio_data = base64.b64decode(clean_base64)
-            print(f"    Decoded {len(audio_data)} bytes")
-        except Exception as e:
-             return Response(content=json.dumps({"error": f"Base64 Decode Error: {str(e)}"}), status_code=400, media_type="application/json")
-
-        # Сохраняем во временный файл в /tmp (Это важно для Vercel!)
+        
+        # Создаем временный файл
         temp_filename = f"audio_{os.urandom(4).hex()}.m4a"
         temp_file_path = os.path.join("/tmp", temp_filename)
-        
-        print(f"3. Saving to {temp_file_path}")
-        with open(temp_file_path, "wb") as f:
-            f.write(audio_data)
 
-        try:
-            # 1. Whisper
-            print("4. Sending to Whisper...")
-            with open(temp_file_path, "rb") as audio_file:
-                transcription = client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file
-                )
+        # ЛОГИКА ВЫБОРА ИСТОЧНИКА
+        if request.file_key:
+            # ВАРИАНТ А: Файл в S3 (Новый способ)
+            print(f"2. Downloading from S3: {request.file_key}")
+            s3_client.download_file(BUCKET_NAME, request.file_key, temp_file_path)
             
-            raw_text = transcription.text
-            print(f"    Whisper result: {raw_text[:50]}...")
+        elif request.audio_base64:
+            # ВАРИАНТ Б: Base64 (Старый способ - для совместимости)
+            print("2. Decoding Base64...")
+            clean_base64 = request.audio_base64.replace("\n", "").replace("\r", "")
+            audio_data = base64.b64decode(clean_base64)
+            with open(temp_file_path, "wb") as f:
+                f.write(audio_data)
+        else:
+            return JSONResponse(content={"error": "No file_key or audio_base64 provided"}, status_code=400)
 
-            # 2. GPT-4o
-            print("5. Sending to GPT...")
-            completion = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": f"You are a professional editor. {request.prompt}. Return the result strictly as a valid JSON object with two keys: 'title' (string) and 'content' (string containing HTML). Do not add any markdown formatting."},
-                    {"role": "user", "content": f"Here is the raw transcript: {raw_text}"}
-                ],
-                response_format={"type": "json_object"}
+        # ДАЛЬШЕ ВСЁ КАК ОБЫЧНО (Whisper -> GPT)
+        print("3. Sending to Whisper...")
+        with open(temp_file_path, "rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file
             )
+        
+        raw_text = transcription.text
+        print(f"   Whisper result: {raw_text[:50]}...")
 
-            raw_response = completion.choices[0].message.content
-            clean_response = clean_json_string(raw_response)
+        print("4. Sending to GPT...")
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": f"You are a professional editor. {request.prompt}. Return the result strictly as a valid JSON object with two keys: 'title' (string) and 'content' (string containing HTML). Do not add any markdown formatting."},
+                {"role": "user", "content": f"Here is the raw transcript: {raw_text}"}
+            ],
+            response_format={"type": "json_object"}
+        )
 
-            print("6. Success!")
-            return Response(content=clean_response, media_type="application/json")
-
-        except Exception as openai_error:
-            print(f"OpenAI Error: {str(openai_error)}")
-            return Response(
-                content=json.dumps({"error": f"OpenAI Error: {str(openai_error)}"}), 
-                status_code=400, # Возвращаем 400, чтобы Android не падал с 500, а показал текст
-                media_type="application/json"
-            )
+        clean_response = clean_json_string(completion.choices[0].message.content)
+        return Response(content=clean_response, media_type="application/json")
 
     except Exception as e:
-        print(f"Critical Error: {str(e)}")
-        # Ловим любую другую ошибку и возвращаем её текстом
-        return Response(
-            content=json.dumps({"error": f"Server Error: {str(e)}"}), 
-            status_code=500, 
-            media_type="application/json"
-        )
+        print(f"Error: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+        
     finally:
-        # Чистим мусор
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.remove(temp_file_path)
