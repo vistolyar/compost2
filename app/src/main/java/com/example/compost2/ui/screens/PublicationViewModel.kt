@@ -11,6 +11,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.compost2.data.SettingsDataStore
+import com.example.compost2.data.auth.GoogleAuthClient
+import com.example.compost2.data.auth.GoogleServicesHelper
 import com.example.compost2.data.network.WpCategory
 import com.example.compost2.data.network.WpClient
 import com.example.compost2.data.network.WpPostRequest
@@ -25,6 +27,7 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
 
     private val dataStore = SettingsDataStore(context)
     private val gson = Gson()
+    private val authClient = GoogleAuthClient(context) // Для проверки авторизации
 
     var recordingItem by mutableStateOf<RecordingItem?>(null)
         private set
@@ -35,16 +38,18 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
     var selectedCategoryIds by mutableStateOf(setOf<Int>())
         private set
 
-    // Выбранный статус публикации
-    // Варианты WP: 'publish', 'draft', 'private', 'pending'
     var selectedStatus by mutableStateOf("publish")
 
     var isLoading by mutableStateOf(false)
-    var isPublishing by mutableStateOf(false)
+    var isPublishing by mutableStateOf(false) // Общий флаг занятости
 
     var publishedUrl: String? = null
-    var publishedId: Int? = null // ID опубликованного поста
+    var publishedId: Int? = null
     var isSuccess by mutableStateOf(false)
+
+    // Флаг, подключен ли Google
+    val isGoogleConnected: Boolean
+        get() = authClient.getSignedInAccount() != null
 
     fun loadData(fileName: String) {
         val file = File(context.cacheDir, fileName)
@@ -56,12 +61,7 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
                     val item = gson.fromJson(reader, RecordingItem::class.java)
                     reader.close()
                     recordingItem = item.copy(filePath = file.absolutePath)
-
-                    // Если пост уже был опубликован, выставляем его ID
                     publishedId = item.wordpressId
-
-                    // Если мы пришли редактировать, статус по умолчанию берем из логики?
-                    // Пока оставим по умолчанию 'publish', но можно усложнить
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -83,8 +83,7 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
                     categories = api.getCategories()
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
-                Toast.makeText(context, "Failed to load categories", Toast.LENGTH_SHORT).show()
+                // Тихая ошибка, если WP не настроен
             } finally {
                 isLoading = false
             }
@@ -103,7 +102,7 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
         selectedStatus = status
     }
 
-    // Главный метод: Создать или Обновить
+    // --- WORDPRESS PUBLISH ---
     fun submitPost() {
         val item = recordingItem ?: return
         if (isPublishing) return
@@ -125,31 +124,75 @@ class PublicationViewModel(private val context: Context) : ViewModel() {
                 val request = WpPostRequest(
                     title = item.articleTitle ?: "Untitled",
                     content = item.articleContent ?: "",
-                    status = selectedStatus, // Используем выбранный статус
+                    status = selectedStatus,
                     categories = selectedCategoryIds.toList()
                 )
 
-                // ЛОГИКА ВЫБОРА: CREATE vs UPDATE
                 val response = if (publishedId != null) {
-                    // Если ID есть - обновляем
                     api.updatePost(publishedId!!, request)
                 } else {
-                    // Если ID нет - создаем
                     api.createPost(request)
                 }
 
                 publishedUrl = response.link
-                publishedId = response.id // Обновляем ID (на случай если это было создание)
-
+                publishedId = response.id
                 isSuccess = true
-                val action = if (publishedId == item.wordpressId) "Updated" else "Published"
-                Toast.makeText(context, "$action successfully!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Published to WordPress!", Toast.LENGTH_SHORT).show()
 
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "WP Error: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 isPublishing = false
+            }
+        }
+    }
+
+    // --- GOOGLE ACTIONS ---
+
+    private fun getHelper(): GoogleServicesHelper? {
+        val account = authClient.getSignedInAccount()
+        if (account == null) {
+            Toast.makeText(context, "Please sign in with Google first", Toast.LENGTH_SHORT).show()
+            return null
+        }
+        return GoogleServicesHelper(context, account)
+    }
+
+    fun exportToCalendar() {
+        val item = recordingItem ?: return
+        val helper = getHelper() ?: return
+
+        isPublishing = true
+        viewModelScope.launch {
+            val resultLink = helper.createCalendarEvent(
+                title = item.articleTitle ?: "Voice Note",
+                description = item.articleContent ?: ""
+            )
+            isPublishing = false
+            if (resultLink != null) {
+                Toast.makeText(context, "Event created in Calendar!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Failed to create event", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+       fun exportToGmail() {
+        val item = recordingItem ?: return
+        val helper = getHelper() ?: return
+
+        isPublishing = true
+        viewModelScope.launch {
+            val result = helper.createDraft(
+                subject = item.articleTitle ?: "Draft from ComPost",
+                bodyText = item.articleContent ?: ""
+            )
+            isPublishing = false
+            if (result != null) {
+                Toast.makeText(context, "Draft saved in Gmail!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(context, "Failed to save draft", Toast.LENGTH_SHORT).show()
             }
         }
     }

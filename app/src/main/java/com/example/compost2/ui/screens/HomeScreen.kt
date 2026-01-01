@@ -2,10 +2,12 @@ package com.example.compost2.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,15 +16,21 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.text.font.FontWeight // <--- ДОБАВЛЕН ЭТОТ ИМПОРТ
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import coil.compose.AsyncImage
 import com.example.compost2.domain.RecordingStatus
 import com.example.compost2.ui.components.RecordingCard
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -35,15 +43,19 @@ fun HomeScreen(
     onNavigateToSendSTT: (String) -> Unit,
     onNavigateToPublish: (String) -> Unit,
     onNavigateToPrompts: () -> Unit,
-    onNavigateToApiKey: (String) -> Unit
+    onNavigateToApiKey: (String) -> Unit,
+    onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    var googleAccount by remember { mutableStateOf<GoogleSignInAccount?>(null) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.loadRecordings()
+                googleAccount = GoogleSignIn.getLastSignedInAccount(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -52,8 +64,8 @@ fun HomeScreen(
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    var showBottomSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
+    var showBottomSheet by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullToRefreshState()
 
     if (pullRefreshState.isRefreshing) {
@@ -86,6 +98,49 @@ fun HomeScreen(
             ModalDrawerSheet {
                 Text("ComPost Menu", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineSmall)
                 Divider()
+
+                if (googleAccount == null) {
+                    NavigationDrawerItem(
+                        label = { Text("Sign in with Google") },
+                        selected = false,
+                        icon = { Icon(Icons.Default.AccountCircle, null) },
+                        onClick = {
+                            scope.launch { drawerState.close() }
+                            onNavigateToSettings()
+                        }
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                scope.launch { drawerState.close() }
+                                onNavigateToSettings()
+                            }
+                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (googleAccount?.photoUrl != null) {
+                            AsyncImage(
+                                model = googleAccount!!.photoUrl,
+                                contentDescription = "Avatar",
+                                modifier = Modifier.size(32.dp).clip(CircleShape)
+                            )
+                        } else {
+                            Icon(Icons.Default.AccountCircle, null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = googleAccount?.displayName ?: "User",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Divider(modifier = Modifier.padding(vertical = 8.dp))
+
                 NavigationDrawerItem(
                     label = { Text("Prompts") },
                     selected = false,
@@ -98,8 +153,9 @@ fun HomeScreen(
                     icon = { Icon(Icons.Default.DarkMode, null) },
                     onClick = { viewModel.toggleTheme() }
                 )
+
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
-                Text("Integrations", modifier = Modifier.padding(start = 16.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
+                Text("API Settings (Legacy)", modifier = Modifier.padding(start = 16.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
                 NavigationDrawerItem(
                     label = { Text("OpenAI API Key") },
                     selected = false,
@@ -128,7 +184,6 @@ fun HomeScreen(
             },
             floatingActionButton = {
                 FloatingActionButton(onClick = {
-                    // ДУБЛИРУЕМ ФУНКЦИОНАЛ: Кнопка "+" теперь сразу ведет в рекордер
                     onNavigateToRecorder()
                 }) {
                     Icon(Icons.Default.Add, null)
@@ -140,13 +195,19 @@ fun HomeScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
                     .nestedScroll(pullRefreshState.nestedScrollConnection)
-                    // ДОБАВЛЕН СВАЙП ВЛЕВО
+                    // --- ОБРАБОТКА ЖЕСТОВ ---
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures { change, dragAmount ->
                             change.consume()
-                            // Если свайп влево и он достаточно сильный
+
+                            // Свайп ВЛЕВО -> Открыть Рекордер
                             if (dragAmount < -20) {
                                 onNavigateToRecorder()
+                            }
+
+                            // Свайп ВПРАВО -> Открыть Меню
+                            if (dragAmount > 20) {
+                                scope.launch { drawerState.open() }
                             }
                         }
                     }
@@ -164,9 +225,10 @@ fun HomeScreen(
                             onClick = {
                                 when (item.status) {
                                     RecordingStatus.SAVED -> onNavigateToPlayer(item.id)
-                                    RecordingStatus.PROCESSING -> { /* Ждем завершения */ }
+                                    RecordingStatus.PROCESSING -> { /* Ждем */ }
                                     RecordingStatus.READY -> onNavigateToPublish(item.id)
                                     RecordingStatus.PUBLISHED -> onNavigateToPublish(item.id)
+                                    RecordingStatus.TRANSCRIBED -> onNavigateToPublish(item.id)
                                 }
                             },
                             onSendToSTT = { onNavigateToSendSTT(item.id) },

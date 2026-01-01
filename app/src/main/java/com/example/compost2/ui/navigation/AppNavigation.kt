@@ -27,12 +27,11 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val context = LocalContext.current
 
-    // Создаем ViewModel здесь, так как изменения в MainActivity не применялись
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.provideFactory(context))
 
     NavHost(navController = navController, startDestination = Screen.Home.route) {
 
-        // --- ГЛАВНЫЙ ЭКРАН (С АНИМАЦИЕЙ) ---
+        // --- ГЛАВНЫЙ ЭКРАН ---
         composable(
             route = Screen.Home.route,
             enterTransition = {
@@ -61,11 +60,14 @@ fun AppNavigation() {
                 },
                 onNavigateToApiKey = { type ->
                     navController.navigate(Screen.ApiKeySettings.createRoute(type))
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Screen.Settings.route)
                 }
             )
         }
 
-        // --- ЗАПИСЬ (С АНИМАЦИЕЙ) ---
+        // --- ЗАПИСЬ ---
         composable(
             route = Screen.Recorder.route,
             enterTransition = {
@@ -195,6 +197,13 @@ fun AppNavigation() {
             )
         }
 
-        composable(Screen.Settings.route) { SettingsScreen() }
+        // --- ЭКРАН НАСТРОЕК GOOGLE (ОБНОВЛЕННЫЙ) ---
+        composable(Screen.Settings.route) {
+            SettingsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
     }
 }

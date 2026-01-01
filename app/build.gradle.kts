@@ -37,6 +37,25 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // БЛОК УПАКОВКИ РЕСУРСОВ
+    packaging {
+        resources {
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.txt"
+            excludes += "META-INF/license.txt"
+            // --- ДОБАВЛЕНЫ ЭТИ СТРОКИ (РЕШЕНИЕ ОШИБКИ) ---
+            excludes += "META-INF/LICENSE.md"
+            excludes += "META-INF/NOTICE.md"
+            // ---------------------------------------------
+            excludes += "META-INF/NOTICE"
+            excludes += "META-INF/NOTICE.txt"
+            excludes += "META-INF/notice.txt"
+            excludes += "META-INF/ASL2.0"
+            excludes += "META-INF/*.kotlin_module"
+        }
+    }
 }
 
 dependencies {
@@ -49,9 +68,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
 
-    // --- ДОБАВЛЕНА НАВИГАЦИЯ ---
     implementation(libs.androidx.navigation.compose)
-
     implementation(libs.androidx.material.icons.extended)
 
     implementation(libs.retrofit)
@@ -59,6 +76,30 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.androidx.datastore.preferences)
+
+    // Auth & Images
+    // ИСКЛЮЧАЕМ конфликтующий модуль http-client из play-services-auth
+    implementation("com.google.android.gms:play-services-auth:21.0.0") {
+        exclude(group = "com.google.http-client", module = "google-http-client")
+    }
+    implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // --- GOOGLE API CLIENTS (ЗОЛОТОЙ СТАНДАРТ 1.x) ---
+    // Это гарантирует наличие класса com.google.api.client.extensions.android.http.AndroidHttp
+    implementation("com.google.api-client:google-api-client-android:1.35.2")
+
+    // Явно подключаем android-версию http клиента
+    implementation("com.google.http-client:google-http-client-android:1.42.3")
+    implementation("com.google.http-client:google-http-client-gson:1.42.3")
+
+    // Сервисы
+    implementation("com.google.apis:google-api-services-calendar:v3-rev20220715-1.32.1")
+    implementation("com.google.apis:google-api-services-gmail:v1-rev20220404-1.32.1")
+    // Tasks удален, чтобы не вызывать ошибок
+
+    // Email (JavaMail)
+    implementation("com.sun.mail:android-mail:1.6.7")
+    implementation("com.sun.mail:android-activation:1.6.7")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

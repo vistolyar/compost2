@@ -1,52 +1,22 @@
 package com.example.compost2.ui.screens
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit // ВОТ ЭТОТ ИМПОРТ БЫЛ НУЖЕН
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Publish
 import androidx.compose.material.icons.filled.Update
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -61,7 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 fun PublicationScreen(
     fileName: String,
     onNavigateBack: () -> Unit,
-    onPublished: (String, Int) -> Unit, // Возвращаем URL и ID
+    onPublished: (String, Int) -> Unit,
     onDeleted: () -> Unit
 ) {
     val context = LocalContext.current
@@ -85,7 +55,7 @@ fun PublicationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (viewModel.publishedId != null) "Manage Post" else "Publish Article") },
+                title = { Text("Publish & Export") },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -111,10 +81,10 @@ fun PublicationScreen(
                         Icon(Icons.Default.Delete, null, tint = MaterialTheme.colorScheme.onErrorContainer)
                     }
 
-                    // Кнопка действия (Создать или Обновить)
+                    // Кнопка действия (WordPress)
                     Button(
                         onClick = { viewModel.submitPost() },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2196F3)), // Blue for WP
                         enabled = !viewModel.isPublishing,
                         modifier = Modifier.weight(1f).padding(start = 16.dp)
                     ) {
@@ -124,7 +94,7 @@ fun PublicationScreen(
                             val isUpdate = viewModel.publishedId != null
                             Icon(if (isUpdate) Icons.Default.Update else Icons.Default.Publish, null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (isUpdate) "Update Post" else "Publish")
+                            Text(if (isUpdate) "Update WP" else "Post to WordPress")
                         }
                     }
                 }
@@ -132,93 +102,132 @@ fun PublicationScreen(
         }
     ) { paddingValues ->
 
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            // Заголовок
-            Text("Article:", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
-            Text(
-                text = viewModel.recordingItem?.articleTitle ?: "Loading...",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
+            item {
+                // Заголовок
+                Text("Article:", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                Text(
+                    text = viewModel.recordingItem?.articleTitle ?: "Loading...",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
 
-            Divider()
-            Spacer(modifier = Modifier.height(16.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(16.dp))
 
-            // --- ВЫБОР СТАТУСА ---
-            Text("Status:", style = MaterialTheme.typography.titleMedium)
-            StatusOption(
-                label = "Publish (Public)",
-                value = "publish",
-                current = viewModel.selectedStatus,
-                icon = Icons.Default.Public,
-                onSelect = { viewModel.setStatus(it) }
-            )
-            StatusOption(
-                label = "Draft (Hidden)",
-                value = "draft",
-                current = viewModel.selectedStatus,
-                icon = Icons.Default.Edit,
-                onSelect = { viewModel.setStatus(it) }
-            )
-            StatusOption(
-                label = "Private (Only me)",
-                value = "private",
-                current = viewModel.selectedStatus,
-                icon = Icons.Default.VisibilityOff,
-                onSelect = { viewModel.setStatus(it) }
-            )
+                // --- БЛОК GOOGLE EXPORT ---
+                Text("Google Integrations:", style = MaterialTheme.typography.titleMedium)
+                Spacer(modifier = Modifier.height(8.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
-            Divider()
-            Spacer(modifier = Modifier.height(16.dp))
+                if (viewModel.isGoogleConnected) {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // Calendar
+                        OutlinedButton(
+                            onClick = { viewModel.exportToCalendar() },
+                            modifier = Modifier.weight(1f),
+                            enabled = !viewModel.isPublishing
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.DateRange, null, tint = Color(0xFFDB4437))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Event", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
 
-            // Список категорий
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Categories:", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                if (viewModel.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
-            ) {
-                LazyColumn(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                    if (viewModel.categories.isEmpty() && !viewModel.isLoading) {
-                        item {
-                            Text("No categories found.", modifier = Modifier.padding(16.dp), color = Color.Gray)
+                        // Gmail
+                        OutlinedButton(
+                            onClick = { viewModel.exportToGmail() },
+                            modifier = Modifier.weight(1f),
+                            enabled = !viewModel.isPublishing
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Icon(Icons.Default.Email, null, tint = Color(0xFFEA4335))
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Draft", style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
-
-                    items(viewModel.categories) { category ->
-                        val isSelected = viewModel.selectedCategoryIds.contains(category.id)
+                } else {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { viewModel.toggleCategory(category.id) }
-                                .padding(vertical = 4.dp)
+                            modifier = Modifier.padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Checkbox(
-                                checked = isSelected,
-                                onCheckedChange = { viewModel.toggleCategory(category.id) },
-                                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
-                            )
                             Text(
-                                text = category.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(start = 8.dp)
+                                "Connect Google Account in Settings to enable export features.",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
                             )
                         }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
+                Divider()
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // --- БЛОК WORDPRESS SETTINGS ---
+                Text("WordPress Options:", style = MaterialTheme.typography.titleMedium)
+                StatusOption(
+                    label = "Publish (Public)",
+                    value = "publish",
+                    current = viewModel.selectedStatus,
+                    icon = Icons.Default.Public,
+                    onSelect = { viewModel.setStatus(it) }
+                )
+                StatusOption(
+                    label = "Draft (Hidden)",
+                    value = "draft",
+                    current = viewModel.selectedStatus,
+                    icon = Icons.Default.Edit,
+                    onSelect = { viewModel.setStatus(it) }
+                )
+                StatusOption(
+                    label = "Private (Only me)",
+                    value = "private",
+                    current = viewModel.selectedStatus,
+                    icon = Icons.Default.VisibilityOff,
+                    onSelect = { viewModel.setStatus(it) }
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Categories:", style = MaterialTheme.typography.titleMedium)
+            }
+
+            // Список категорий
+            if (viewModel.isLoading) {
+                item { CircularProgressIndicator(modifier = Modifier.size(24.dp)) }
+            } else if (viewModel.categories.isEmpty()) {
+                item { Text("No categories found (or WP not connected).", color = Color.Gray) }
+            } else {
+                items(viewModel.categories) { category ->
+                    val isSelected = viewModel.selectedCategoryIds.contains(category.id)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.toggleCategory(category.id) }
+                            .padding(vertical = 4.dp)
+                    ) {
+                        Checkbox(
+                            checked = isSelected,
+                            onCheckedChange = { viewModel.toggleCategory(category.id) },
+                            colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
+                        )
+                        Text(
+                            text = category.name,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
                     }
                 }
             }
