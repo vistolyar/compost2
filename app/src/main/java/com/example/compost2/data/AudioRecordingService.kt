@@ -1,7 +1,6 @@
 package com.example.compost2.data
 
 import android.app.*
-import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -13,7 +12,6 @@ class AudioRecordingService : Service() {
     private val CHANNEL_ID = "recording_channel"
 
     companion object {
-        // Это позволит ViewModel брать амплитуду прямо из работающего сервиса
         var activeRecorder: AndroidAudioRecorder? = null
     }
 
@@ -28,49 +26,71 @@ class AudioRecordingService : Service() {
             "START" -> {
                 val path = intent.getStringExtra("PATH") ?: return START_NOT_STICKY
                 activeRecorder?.start(File(path))
-                startForeground(1, createNotification("Запись идет..."))
+                startForeground(1, createNotification("Recording..."))
             }
             "PAUSE" -> {
                 activeRecorder?.pause()
-                updateNotification("На паузе")
+                updateNotification("Paused")
             }
             "RESUME" -> {
                 activeRecorder?.resume()
-                updateNotification("Запись идет...")
+                updateNotification("Recording...")
             }
             "STOP" -> {
-                activeRecorder?.stop()
-                stopForeground(STOP_FOREGROUND_REMOVE)
+                forceStopRecording()
                 stopSelf()
             }
         }
         return START_NOT_STICKY
     }
 
+    // Этот метод вызывается, когда пользователь смахивает приложение из "Недавних"
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        forceStopRecording()
+        stopSelf()
+    }
+
+    // Гарантированная очистка при уничтожении сервиса
+    override fun onDestroy() {
+        forceStopRecording()
+        activeRecorder = null
+        super.onDestroy()
+    }
+
+    private fun forceStopRecording() {
+        try {
+            activeRecorder?.stop() // Внутри AndroidAudioRecorder это вызовет release()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+    }
+
     private fun createNotification(text: String): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pi = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
+
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("ComPost")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setOngoing(true)
+            .setOngoing(true) // Уведомление нельзя смахнуть пока идет запись
             .setContentIntent(pi)
             .build()
     }
 
-    private fun updateNotification(t: String) = (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(1, createNotification(t))
+    private fun updateNotification(t: String) {
+        val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(1, createNotification(t))
+    }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val chan = NotificationChannel(CHANNEL_ID, "Record", NotificationManager.IMPORTANCE_LOW)
-            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(chan)
+            val chan = NotificationChannel(CHANNEL_ID, "Voice Recorder", NotificationManager.IMPORTANCE_LOW)
+            val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(chan)
         }
-    }
-
-    override fun onDestroy() {
-        activeRecorder = null
-        super.onDestroy()
     }
 
     override fun onBind(i: Intent?): IBinder? = null

@@ -7,9 +7,7 @@ import com.example.compost2.domain.AudioRecorder
 import java.io.File
 import java.io.FileOutputStream
 
-class AndroidAudioRecorder(
-    private val context: Context
-) : AudioRecorder {
+class AndroidAudioRecorder(private val context: Context): AudioRecorder {
 
     private var recorder: MediaRecorder? = null
 
@@ -23,18 +21,13 @@ class AndroidAudioRecorder(
     }
 
     override fun start(outputFile: File) {
+        // На всякий случай освобождаем старый, если он был
+        stop()
+
         createRecorder().apply {
             setAudioSource(MediaRecorder.AudioSource.MIC)
             setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
             setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-
-            // --- НАСТРОЙКИ ДЛЯ VERCEL (СЖАТИЕ) ---
-            // 64 kbps (64000) - оптимально для голоса, размер файла маленький
-            setAudioEncodingBitRate(64000)
-            // 16 kHz (16000) - родная частота для Whisper, экономит место
-            setAudioSamplingRate(16000)
-            // -------------------------------------
-
             setOutputFile(FileOutputStream(outputFile).fd)
 
             prepare()
@@ -42,16 +35,6 @@ class AndroidAudioRecorder(
 
             recorder = this
         }
-    }
-
-    override fun stop() {
-        try {
-            recorder?.stop()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-        recorder?.reset()
-        recorder = null
     }
 
     override fun pause() {
@@ -66,7 +49,24 @@ class AndroidAudioRecorder(
         }
     }
 
+    override fun stop() {
+        try {
+            recorder?.stop()
+        } catch (e: Exception) {
+            // Иногда stop() падает, если запись была слишком короткой или не началась
+            e.printStackTrace()
+        } finally {
+            // САМОЕ ВАЖНОЕ: Освобождаем микрофон
+            recorder?.release()
+            recorder = null
+        }
+    }
+
     override fun getAmplitude(): Int {
-        return recorder?.maxAmplitude ?: 0
+        return try {
+            recorder?.maxAmplitude ?: 0
+        } catch (e: Exception) {
+            0
+        }
     }
 }
