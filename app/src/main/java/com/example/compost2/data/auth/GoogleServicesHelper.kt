@@ -15,6 +15,10 @@ import com.google.api.services.gmail.Gmail
 import com.google.api.services.gmail.model.Draft
 import com.google.api.services.gmail.model.Message as GmailMessage
 
+// Алиасы для Tasks (РЕШЕНИЕ КОНФЛИКТА ИМЕН)
+import com.google.api.services.tasks.Tasks as TasksService
+import com.google.api.services.tasks.model.Task as GoogleTask
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -34,7 +38,10 @@ class GoogleServicesHelper(private val context: Context, private val account: Go
     }
 
     private val jsonFactory = GsonFactory.getDefaultInstance()
+
+    // Используем AndroidHttp (он есть в версии 1.35.2)
     private val httpTransport = AndroidHttp.newCompatibleTransport()
+
     private val appName = "ComPost"
 
     // --- CALENDAR ---
@@ -45,6 +52,7 @@ class GoogleServicesHelper(private val context: Context, private val account: Go
                 .build()
 
             val event = Event()
+            // Используем явные сеттеры
             event.setSummary(title)
             event.setDescription(description)
 
@@ -56,6 +64,30 @@ class GoogleServicesHelper(private val context: Context, private val account: Go
 
             val createdEvent = service.events().insert("primary", event).execute()
             createdEvent.htmlLink
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    // --- TASKS ---
+    suspend fun createTask(taskTitle: String, taskNotes: String): String? = withContext(Dispatchers.IO) {
+        try {
+            // Используем алиас TasksService
+            val service = TasksService.Builder(httpTransport, jsonFactory, credential)
+                .setApplicationName(appName)
+                .build()
+
+            // Используем алиас GoogleTask
+            val task = GoogleTask()
+            // Используем явные сеттеры, чтобы избежать ошибки "Variable expected"
+            task.setTitle(taskTitle)
+            task.setNotes(taskNotes)
+
+            // @default - это ID списка задач "Мои задачи"
+            val createdTask = service.tasks().insert("@default", task).execute()
+            createdTask.selfLink
+            "Task Created"
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -83,10 +115,10 @@ class GoogleServicesHelper(private val context: Context, private val account: Go
             val encodedEmail = Base64.encodeBase64URLSafeString(buffer.toByteArray())
 
             val message = GmailMessage()
-            message.setRaw(encodedEmail)
+            message.setRaw(encodedEmail) // Сеттер!
 
             val draft = Draft()
-            draft.setMessage(message)
+            draft.setMessage(message) // Сеттер!
 
             val createdDraft = service.users().drafts().create("me", draft).execute()
             createdDraft.id

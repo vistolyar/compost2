@@ -1,6 +1,7 @@
 package com.example.compost2.data
 
 import android.content.Context
+import com.example.compost2.domain.IntegrationType
 import com.example.compost2.domain.PromptItem
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -16,26 +17,75 @@ class PromptsRepository(private val context: Context) {
 
     fun getPrompts(): List<PromptItem> {
         if (!file.exists()) {
-            // Если файла нет, создаем дефолтные промпты
-            val defaults = listOf(
-                PromptItem("1", "Default Transcriber", "Just transcribe the audio exactly as is.", false, "System"),
-                PromptItem("2", "Blog Post", "Write a structured blog post based on this transcript.", false, "System"),
-                PromptItem("3", "Summary", "Create a bullet-point summary.", false, "System")
-            )
-            savePrompts(defaults)
-            return defaults
+            return createDefaults()
         }
 
         return try {
             val reader = FileReader(file)
             val type = object : TypeToken<List<PromptItem>>() {}.type
-            val list: List<PromptItem> = gson.fromJson(reader, type)
+            val list: List<PromptItem>? = gson.fromJson(reader, type)
             reader.close()
+
+            if (list == null) return createDefaults()
+
+            // --- ПРОВЕРКА НА БИТЫЕ/СТАРЫЕ ДАННЫЕ ---
+            // Если хотя бы у одного элемента поле integrationType равно null (из-за Gson),
+            // считаем файл устаревшим и пересоздаем его.
+            val hasInvalidItems = list.any { it.integrationType == null }
+
+            if (hasInvalidItems) {
+                // Можно попытаться мигрировать данные, но проще пересоздать дефолтные,
+                // так как это development-версия.
+                file.delete()
+                return createDefaults()
+            }
+
             list
         } catch (e: Exception) {
             e.printStackTrace()
-            emptyList()
+            // В случае любой ошибки чтения (например, изменилась структура) - сброс
+            file.delete()
+            createDefaults()
         }
+    }
+
+    private fun createDefaults(): List<PromptItem> {
+        val defaults = listOf(
+            PromptItem(
+                id = "1",
+                title = "Default Transcriber",
+                content = "Just transcribe the audio exactly as is.",
+                integrationType = IntegrationType.NONE,
+                isDraft = false,
+                lastModified = "System"
+            ),
+            PromptItem(
+                id = "2",
+                title = "Blog Post",
+                content = "Write a structured blog post based on this transcript.",
+                integrationType = IntegrationType.WORDPRESS,
+                isDraft = false,
+                lastModified = "System"
+            ),
+            PromptItem(
+                id = "3",
+                title = "Meeting Summary",
+                content = "Create a bullet-point summary and extract action items.",
+                integrationType = IntegrationType.NONE,
+                isDraft = false,
+                lastModified = "System"
+            ),
+            PromptItem(
+                id = "4",
+                title = "Create Event",
+                content = "Extract date, time and title for a calendar event.",
+                integrationType = IntegrationType.CALENDAR,
+                isDraft = false,
+                lastModified = "System"
+            )
+        )
+        savePrompts(defaults)
+        return defaults
     }
 
     fun savePrompts(prompts: List<PromptItem>) {
@@ -50,7 +100,7 @@ class PromptsRepository(private val context: Context) {
 
     fun addPrompt(prompt: PromptItem) {
         val current = getPrompts().toMutableList()
-        current.add(0, prompt) // Добавляем в начало
+        current.add(0, prompt)
         savePrompts(current)
     }
 

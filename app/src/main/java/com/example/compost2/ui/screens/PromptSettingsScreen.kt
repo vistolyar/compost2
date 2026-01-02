@@ -2,14 +2,7 @@ package com.example.compost2.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -17,28 +10,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,7 +25,8 @@ import com.example.compost2.domain.PromptItem
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PromptSettingsScreen(
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    onEditPrompt: (String?) -> Unit // null для создания, ID для редактирования
 ) {
     val context = LocalContext.current
     val viewModel: PromptSettingsViewModel = viewModel(factory = PromptSettingsViewModel.provideFactory(context))
@@ -69,7 +43,7 @@ fun PromptSettingsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = { viewModel.openCreateDialog() }) {
+            FloatingActionButton(onClick = { onEditPrompt(null) }) {
                 Icon(Icons.Default.Add, contentDescription = "New Prompt")
             }
         }
@@ -85,46 +59,9 @@ fun PromptSettingsScreen(
                 PromptCard(
                     prompt = prompt,
                     onDelete = { viewModel.deletePrompt(prompt.id) },
-                    onEdit = { viewModel.openEditDialog(prompt) }
+                    onEdit = { onEditPrompt(prompt.id) }
                 )
             }
-        }
-
-        // Диалог добавления/редактирования
-        if (viewModel.showDialog) {
-            AlertDialog(
-                onDismissRequest = { viewModel.closeDialog() },
-                title = { Text(if (viewModel.currentEditingId == null) "New Persona" else "Edit Persona") },
-                text = {
-                    Column {
-                        OutlinedTextField(
-                            value = viewModel.editTitle,
-                            onValueChange = { viewModel.editTitle = it },
-                            label = { Text("Name (e.g. SEO Expert)") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = viewModel.editContent,
-                            onValueChange = { viewModel.editContent = it },
-                            label = { Text("System Prompt Instructions") },
-                            modifier = Modifier.fillMaxWidth().height(150.dp),
-                            maxLines = 10
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(onClick = { viewModel.saveFromDialog() }) {
-                        Text("Save")
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { viewModel.closeDialog() }) {
-                        Text("Cancel")
-                    }
-                }
-            )
         }
     }
 }
@@ -135,8 +72,6 @@ fun PromptCard(
     onDelete: () -> Unit,
     onEdit: () -> Unit
 ) {
-    var showMenu by remember { mutableStateOf(false) }
-
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -147,7 +82,7 @@ fun PromptCard(
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -156,40 +91,18 @@ fun PromptCard(
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = prompt.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Gray,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+                // Отображаем тип интеграции, если есть
+                if (prompt.integrationType.name != "NONE") {
+                    Text(
+                        text = "Linked to: ${prompt.integrationType.name}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
 
-            Box {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Options")
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Edit") },
-                        onClick = {
-                            showMenu = false
-                            onEdit()
-                        },
-                        leadingIcon = { Icon(Icons.Default.Edit, null) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Delete", color = Color.Red) },
-                        onClick = {
-                            showMenu = false
-                            onDelete()
-                        },
-                        leadingIcon = { Icon(Icons.Default.Delete, null, tint = Color.Red) }
-                    )
-                }
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, null, tint = Color.Gray)
             }
         }
     }

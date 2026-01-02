@@ -9,25 +9,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.compost2.data.PromptsRepository
+import com.example.compost2.domain.IntegrationType
 import com.example.compost2.domain.PromptItem
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
 
-class PromptSettingsViewModel(context: Context) : ViewModel() {
+class PromptSettingsViewModel(private val repository: PromptsRepository) : ViewModel() {
 
-    private val repository = PromptsRepository(context)
-
-    // Текущий список
-    var prompts by mutableStateOf(emptyList<PromptItem>())
+    var prompts by mutableStateOf<List<PromptItem>>(emptyList())
         private set
-
-    // Состояние для диалога редактирования/создания
-    var showDialog by mutableStateOf(false)
-    var currentEditingId: String? = null // Если null - значит создаем новый
-    var editTitle by mutableStateOf("")
-    var editContent by mutableStateOf("")
 
     init {
         loadPrompts()
@@ -37,65 +29,49 @@ class PromptSettingsViewModel(context: Context) : ViewModel() {
         prompts = repository.getPrompts()
     }
 
+    // Метод для получения промпта при редактировании
+    fun getPromptById(id: String): PromptItem? {
+        return prompts.find { it.id == id }
+    }
+
+    fun savePrompt(id: String?, title: String, content: String, type: IntegrationType) {
+        if (title.isBlank()) return
+
+        val date = SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date())
+
+        if (id == null) {
+            // Создание нового
+            val newItem = PromptItem(
+                id = UUID.randomUUID().toString(),
+                title = title,
+                content = content,
+                integrationType = type,
+                lastModified = date
+            )
+            repository.addPrompt(newItem)
+        } else {
+            // Обновление существующего
+            val existing = getPromptById(id) ?: return
+            val updated = existing.copy(
+                title = title,
+                content = content,
+                integrationType = type,
+                lastModified = date
+            )
+            repository.updatePrompt(updated)
+        }
+        loadPrompts()
+    }
+
     fun deletePrompt(id: String) {
         repository.deletePrompt(id)
         loadPrompts()
     }
 
-    // Открыть диалог создания
-    fun openCreateDialog() {
-        currentEditingId = null
-        editTitle = ""
-        editContent = ""
-        showDialog = true
-    }
-
-    // Открыть диалог редактирования
-    fun openEditDialog(item: PromptItem) {
-        currentEditingId = item.id
-        editTitle = item.title
-        editContent = item.content
-        showDialog = true
-    }
-
-    // Сохранить (из диалога)
-    fun saveFromDialog() {
-        val timestamp = SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date())
-
-        if (currentEditingId == null) {
-            // Создание нового
-            val newItem = PromptItem(
-                id = UUID.randomUUID().toString(),
-                title = editTitle,
-                content = editContent,
-                isDraft = false,
-                lastModified = timestamp
-            )
-            repository.addPrompt(newItem)
-        } else {
-            // Обновление старого
-            val updatedItem = PromptItem(
-                id = currentEditingId!!,
-                title = editTitle,
-                content = editContent,
-                isDraft = false,
-                lastModified = timestamp
-            )
-            repository.updatePrompt(updatedItem)
-        }
-
-        loadPrompts()
-        showDialog = false
-    }
-
-    fun closeDialog() {
-        showDialog = false
-    }
-
     companion object {
         fun provideFactory(context: Context): ViewModelProvider.Factory = viewModelFactory {
             initializer {
-                PromptSettingsViewModel(context)
+                PromptSettingsViewModel(com.example.compost2.data.PromptsRepository(context))
             }
         }
     }

@@ -38,17 +38,15 @@ android {
         compose = true
     }
 
-    // БЛОК УПАКОВКИ РЕСУРСОВ
+    // БЛОК УПАКОВКИ РЕСУРСОВ (ВАЖЕН ДЛЯ ИЗБЕЖАНИЯ ОШИБОК СБОРКИ)
     packaging {
         resources {
             excludes += "META-INF/DEPENDENCIES"
             excludes += "META-INF/LICENSE"
             excludes += "META-INF/LICENSE.txt"
             excludes += "META-INF/license.txt"
-            // --- ДОБАВЛЕНЫ ЭТИ СТРОКИ (РЕШЕНИЕ ОШИБКИ) ---
             excludes += "META-INF/LICENSE.md"
             excludes += "META-INF/NOTICE.md"
-            // ---------------------------------------------
             excludes += "META-INF/NOTICE"
             excludes += "META-INF/NOTICE.txt"
             excludes += "META-INF/notice.txt"
@@ -92,10 +90,11 @@ dependencies {
     implementation("com.google.http-client:google-http-client-android:1.42.3")
     implementation("com.google.http-client:google-http-client-gson:1.42.3")
 
-    // Сервисы
+    // Сервисы - ВСЕ ВЕРСИИ СИНХРОНИЗИРОВАНЫ (1.32.1)
     implementation("com.google.apis:google-api-services-calendar:v3-rev20220715-1.32.1")
     implementation("com.google.apis:google-api-services-gmail:v1-rev20220404-1.32.1")
-    // Tasks удален, чтобы не вызывать ошибок
+    // Исправленная версия Tasks (она точно есть в репозитории)
+    implementation("com.google.apis:google-api-services-tasks:v1-rev20210709-1.32.1")
 
     // Email (JavaMail)
     implementation("com.sun.mail:android-mail:1.6.7")

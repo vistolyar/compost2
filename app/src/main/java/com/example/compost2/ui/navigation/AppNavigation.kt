@@ -11,15 +11,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.compost2.ui.screens.ApiKeyScreen
-import com.example.compost2.ui.screens.EditorScreen
+import com.example.compost2.ui.screens.DetailScreen
 import com.example.compost2.ui.screens.HomeScreen
 import com.example.compost2.ui.screens.HomeViewModel
-import com.example.compost2.ui.screens.PlayerScreen
+import com.example.compost2.ui.screens.PromptEditScreen // Новый экран
 import com.example.compost2.ui.screens.PromptSettingsScreen
-import com.example.compost2.ui.screens.PublicationScreen
 import com.example.compost2.ui.screens.RecorderScreen
-import com.example.compost2.ui.screens.SendToSTTScreen
-import com.example.compost2.ui.screens.SendToSTTViewModel
 import com.example.compost2.ui.screens.SettingsScreen
 
 @Composable
@@ -46,15 +43,17 @@ fun AppNavigation() {
                 onNavigateToRecorder = {
                     navController.navigate(Screen.Recorder.route)
                 },
+                // ПЕРЕХОД НА ЕДИНЫЙ ЭКРАН
                 onNavigateToPlayer = { fileName ->
-                    navController.navigate(Screen.Player.createRoute(fileName))
+                    navController.navigate("detail/$fileName")
                 },
                 onNavigateToSendSTT = { fileName ->
-                    navController.navigate(Screen.SendToSTT.createRoute(fileName))
+                    navController.navigate("detail/$fileName")
                 },
                 onNavigateToPublish = { fileName ->
-                    navController.navigate(Screen.Editor.createRoute(fileName))
+                    navController.navigate("detail/$fileName")
                 },
+                // Переход к списку промптов
                 onNavigateToPrompts = {
                     navController.navigate("prompt_settings")
                 },
@@ -84,101 +83,53 @@ fun AppNavigation() {
             )
         }
 
-        // --- ПЛЕЕР ---
+        // --- ЕДИНЫЙ ЭКРАН ПРОСМОТРА (DETAIL) ---
         composable(
-            route = Screen.Player.route,
-            arguments = listOf(navArgument("fileName") { type = NavType.StringType })
+            route = "detail/{fileName}",
+            arguments = listOf(navArgument("fileName") { type = NavType.StringType }),
+            enterTransition = {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Up, animationSpec = tween(400))
+            },
+            exitTransition = {
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Down, animationSpec = tween(400))
+            }
         ) { backStackEntry ->
             val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
-            PlayerScreen(
+            DetailScreen(
                 fileName = fileName,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // --- СПИСОК ПРОМПТОВ ---
+        composable("prompt_settings") {
+            PromptSettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onNavigateToSendSTT = {
-                    navController.navigate(Screen.SendToSTT.createRoute(fileName))
+                onEditPrompt = { promptId ->
+                    // Если promptId null - это создание, если есть ID - редактирование
+                    val route = if (promptId != null) "prompt_edit?id=$promptId" else "prompt_edit"
+                    navController.navigate(route)
                 }
             )
         }
 
-        // --- ОТПРАВКА В AI ---
+        // --- РЕДАКТОР ПРОМПТА (НОВЫЙ МАРШРУТ) ---
         composable(
-            route = Screen.SendToSTT.route,
-            arguments = listOf(navArgument("fileName") { type = NavType.StringType })
+            route = "prompt_edit?id={id}",
+            arguments = listOf(navArgument("id") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            })
         ) { backStackEntry ->
-            val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
-
-            val sendToSTTViewModel: SendToSTTViewModel = viewModel(factory = SendToSTTViewModel.provideFactory(context))
-
-            SendToSTTScreen(
-                viewModel = sendToSTTViewModel,
-                fileName = fileName,
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToPlayer = { file ->
-                    navController.navigate(Screen.Player.createRoute(file))
-                },
-                onProcessStarted = {
-                    val item = homeViewModel.recordings.find { it.id == fileName }
-                    if (item != null) {
-                        val title = sendToSTTViewModel.resultTitle
-                        val content = sendToSTTViewModel.resultBody
-                        homeViewModel.onAiResultReceived(item, title, content)
-                    }
-                    navController.popBackStack(Screen.Home.route, inclusive = false)
-                }
+            val promptId = backStackEntry.arguments?.getString("id")
+            PromptEditScreen(
+                promptId = promptId,
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        // --- РЕДАКТОР ---
-        composable(
-            route = Screen.Editor.route,
-            arguments = listOf(navArgument("fileName") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
-            val item = homeViewModel.recordings.find { it.id == fileName }
-
-            EditorScreen(
-                item = item,
-                onNavigateBack = { navController.popBackStack() },
-                onNavigateToPublish = {
-                    navController.navigate(Screen.Publication.createRoute(fileName))
-                },
-                onRecreate = {
-                    navController.navigate(Screen.SendToSTT.createRoute(fileName))
-                },
-                onUpdateContent = { title, content ->
-                    homeViewModel.updateArticleData(fileName, title, content)
-                }
-            )
-        }
-
-        // --- ПУБЛИКАЦИЯ ---
-        composable(
-            route = Screen.Publication.route,
-            arguments = listOf(navArgument("fileName") { type = NavType.StringType })
-        ) { backStackEntry ->
-            val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
-
-            PublicationScreen(
-                fileName = fileName,
-                onNavigateBack = { navController.popBackStack() },
-                onPublished = { url, wpId ->
-                    val item = homeViewModel.recordings.find { it.id == fileName }
-                    if (item != null) {
-                        homeViewModel.onPublishedSuccess(item, url, wpId)
-                    }
-                    navController.popBackStack(Screen.Home.route, inclusive = false)
-                },
-                onDeleted = {
-                    val item = homeViewModel.recordings.find { it.id == fileName }
-                    if (item != null) {
-                        homeViewModel.requestDelete(item)
-                        homeViewModel.confirmDelete()
-                    }
-                    navController.popBackStack(Screen.Home.route, inclusive = false)
-                }
-            )
-        }
-
-        // --- НАСТРОЙКИ КЛЮЧЕЙ ---
+        // --- НАСТРОЙКИ КЛЮЧЕЙ (LEGACY) ---
         composable(
             route = Screen.ApiKeySettings.route,
             arguments = listOf(navArgument("serviceType") { type = NavType.StringType })
@@ -190,14 +141,7 @@ fun AppNavigation() {
             )
         }
 
-        // --- НАСТРОЙКИ ПРОМПТОВ ---
-        composable("prompt_settings") {
-            PromptSettingsScreen(
-                onNavigateBack = { navController.popBackStack() }
-            )
-        }
-
-        // --- ЭКРАН НАСТРОЕК GOOGLE (ОБНОВЛЕННЫЙ) ---
+        // --- ЭКРАН НАСТРОЕК GOOGLE ---
         composable(Screen.Settings.route) {
             SettingsScreen(
                 onNavigateBack = {
