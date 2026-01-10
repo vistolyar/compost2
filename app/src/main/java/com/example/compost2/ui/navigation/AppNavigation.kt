@@ -14,7 +14,7 @@ import com.example.compost2.ui.screens.ApiKeyScreen
 import com.example.compost2.ui.screens.DetailScreen
 import com.example.compost2.ui.screens.HomeScreen
 import com.example.compost2.ui.screens.HomeViewModel
-import com.example.compost2.ui.screens.PromptEditScreen // Новый экран
+import com.example.compost2.ui.screens.PromptEditScreen
 import com.example.compost2.ui.screens.PromptSettingsScreen
 import com.example.compost2.ui.screens.RecorderScreen
 import com.example.compost2.ui.screens.SettingsScreen
@@ -43,7 +43,6 @@ fun AppNavigation() {
                 onNavigateToRecorder = {
                     navController.navigate(Screen.Recorder.route)
                 },
-                // ПЕРЕХОД НА ЕДИНЫЙ ЭКРАН
                 onNavigateToPlayer = { fileName ->
                     navController.navigate("detail/$fileName")
                 },
@@ -53,7 +52,6 @@ fun AppNavigation() {
                 onNavigateToPublish = { fileName ->
                     navController.navigate("detail/$fileName")
                 },
-                // Переход к списку промптов
                 onNavigateToPrompts = {
                     navController.navigate("prompt_settings")
                 },
@@ -87,11 +85,19 @@ fun AppNavigation() {
         composable(
             route = "detail/{fileName}",
             arguments = listOf(navArgument("fileName") { type = NavType.StringType }),
+            // ИЗМЕНЕНИЕ: Теперь анимация горизонтальная (слайд справа)
             enterTransition = {
-                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Up, animationSpec = tween(400))
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300))
             },
+            // ИЗМЕНЕНИЕ: При выходе (Back) экран уезжает вправо (как при свайпе)
             exitTransition = {
-                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Down, animationSpec = tween(400))
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300))
+            },
+            popEnterTransition = {
+                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300))
+            },
+            popExitTransition = {
+                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300))
             }
         ) { backStackEntry ->
             val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
@@ -106,14 +112,13 @@ fun AppNavigation() {
             PromptSettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onEditPrompt = { promptId ->
-                    // Если promptId null - это создание, если есть ID - редактирование
                     val route = if (promptId != null) "prompt_edit?id=$promptId" else "prompt_edit"
                     navController.navigate(route)
                 }
             )
         }
 
-        // --- РЕДАКТОР ПРОМПТА (НОВЫЙ МАРШРУТ) ---
+        // --- РЕДАКТОР ПРОМПТА ---
         composable(
             route = "prompt_edit?id={id}",
             arguments = listOf(navArgument("id") {
@@ -129,7 +134,7 @@ fun AppNavigation() {
             )
         }
 
-        // --- НАСТРОЙКИ КЛЮЧЕЙ (LEGACY) ---
+        // --- НАСТРОЙКИ КЛЮЧЕЙ ---
         composable(
             route = Screen.ApiKeySettings.route,
             arguments = listOf(navArgument("serviceType") { type = NavType.StringType })

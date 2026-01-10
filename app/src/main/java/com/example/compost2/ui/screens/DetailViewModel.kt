@@ -29,6 +29,7 @@ import com.example.compost2.data.network.RetrofitClient
 import com.example.compost2.domain.IntegrationType
 import com.example.compost2.domain.PromptItem
 import com.example.compost2.domain.RecordingItem
+import com.example.compost2.domain.RecordingStatus
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,11 +37,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
+import java.text.SimpleDateFormat
+import java.util.Locale
 
 class DetailViewModel(private val context: Context) : ViewModel() {
 
@@ -54,9 +58,16 @@ class DetailViewModel(private val context: Context) : ViewModel() {
         private set
     var title by mutableStateOf("")
     var content by mutableStateOf("")
-
-    // Есть ли исходник для восстановления?
+    var rawText by mutableStateOf("")
     var hasRawText by mutableStateOf(false)
+
+    // ИЗМЕНЕНО: Храним дату как число (timestamp), чтобы UI сам решал, как её рисовать
+    var recordingDateTimestamp by mutableLongStateOf(0L)
+
+    // --- СОСТОЯНИЕ UI ---
+    var showLens by mutableStateOf(false)
+    var showRawTextModal by mutableStateOf(false)
+    var isBusy by mutableStateOf(false)
 
     // --- ПЛЕЕР ---
     private var mediaPlayer: MediaPlayer? = null
@@ -66,15 +77,15 @@ class DetailViewModel(private val context: Context) : ViewModel() {
     var totalDuration by mutableLongStateOf(0L)
     var sliderPosition by mutableFloatStateOf(0f)
 
-    // --- ЛИНЗА И ПРОМПТЫ ---
-    var showLens by mutableStateOf(false)
     var prompts by mutableStateOf<List<PromptItem>>(emptyList())
-    var isBusy by mutableStateOf(false)
 
-    // --- ИНИЦИАЛИЗАЦИЯ ---
     fun loadItem(id: String) {
         prompts = promptsRepository.getPrompts()
         val file = File(context.cacheDir, id)
+
+        // Парсим таймстемп из имени файла
+        recordingDateTimestamp = parseTimestampFromFilename(id)
+
         if (file.exists()) {
             val metaFile = File(file.path + ".json")
             if (metaFile.exists()) {
@@ -86,12 +97,34 @@ class DetailViewModel(private val context: Context) : ViewModel() {
                     item = loadedItem.copy(filePath = file.absolutePath)
                     title = loadedItem.articleTitle ?: loadedItem.name
                     content = loadedItem.articleContent ?: ""
-
-                    // Проверяем наличие сырого текста
-                    hasRawText = !loadedItem.rawTranscription.isNullOrBlank()
+                    rawText = loadedItem.rawTranscription ?: ""
+                    hasRawText = rawText.isNotBlank()
 
                     initPlayer(file)
                 } catch (e: Exception) { e.printStackTrace() }
+            }
+        }
+    }
+
+    // Возвращает Long (миллисекунды)
+    private fun parseTimestampFromFilename(fileName: String): Long {
+        return try {
+            val datePart = fileName.split("_")[0]
+            val format = SimpleDateFormat("yyyy-MM-dd-HH-mm", Locale.getDefault())
+            format.parse(datePart)?.time ?: System.currentTimeMillis()
+        } catch (e: Exception) {
+            System.currentTimeMillis()
+        }
+    }
+
+    fun onStatusAction() {
+        val currentStatus = item?.status ?: return
+        when (currentStatus) {
+            RecordingStatus.TRANSCRIBED, RecordingStatus.PUBLISHED, RecordingStatus.READY -> {
+                showRawTextModal = true
+            }
+            RecordingStatus.SAVED, RecordingStatus.PROCESSING -> {
+                reTranscribe()
             }
         }
     }
@@ -145,32 +178,14 @@ class DetailViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    // --- РЕДАКТИРОВАНИЕ ТЕКСТА ---
-    fun updateContent(newTitle: String, newContent: String) {
-        title = newTitle
-        content = newContent
-        // Автосохранение (rawTranscription не трогаем!)
-        item?.let { current ->
-            val updated = current.copy(
-                articleTitle = newTitle,
-                articleContent = newContent
-            )
-            item = updated
-            saveMetadata(updated)
-        }
+    fun formatDuration(millis: Long): String {
+        val totalSeconds = millis / 1000
+        val minutes = totalSeconds / 60
+        val seconds = totalSeconds % 60
+        return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
     }
 
-    // --- ВОССТАНОВЛЕНИЕ ИСХОДНИКА ---
-    fun restoreRawText() {
-        item?.rawTranscription?.let { raw ->
-            title = item?.articleTitle ?: title
-            content = raw
-            updateContent(title, content)
-            Toast.makeText(context, "Restored to original transcription", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // --- ЛИНЗА / AI ---
+    // --- AI / LENS ---
     fun onOpenLens() {
         if (content.isBlank()) {
             Toast.makeText(context, "No text to process. Transcribe first.", Toast.LENGTH_SHORT).show()
@@ -195,29 +210,19 @@ class DetailViewModel(private val context: Context) : ViewModel() {
                     return@launch
                 }
 
-                // ВАЖНО: Мы всегда обрабатываем ТЕКУЩИЙ текст (content),
-                // чтобы можно было применять промпты цепочкой (Translate -> Summarize)
-                // Но если пользователь хочет начать с чистого листа, он нажмет Restore.
+                val sourceText = if (hasRawText) rawText else content
 
                 val systemInstruction = """
                     You are an Action Extractor API. 
-                    Your goal is to analyze the user text and the user's specific request, then output a JSON object.
-                    
-                    OUTPUT FORMAT:
-                    {
-                      "action_type": "CALENDAR" or "GMAIL" or "NONE",
-                      "title": "A short summary title",
-                      "body": "The main content formatted for the destination",
-                      "date": "YYYY-MM-DD HH:MM" (only if Calendar action)
-                    }
-                    
-                    USER'S REQUEST: ${prompt.content}
+                    Output valid JSON only. No markdown.
+                    Format: { "action_type": "...", "title": "...", "body": "...", "date": "..." }
+                    User Request: ${prompt.content}
                 """.trimIndent()
 
                 val request = ChatRequest(
                     messages = listOf(
                         Message("system", systemInstruction),
-                        Message("user", content)
+                        Message("user", sourceText)
                     )
                 )
 
@@ -259,7 +264,7 @@ class DetailViewModel(private val context: Context) : ViewModel() {
         updateContent(title, content)
     }
 
-    // --- S3 ТРАНСКРИБАЦИЯ ---
+    // --- RE-TRANSCRIBE ---
     fun reTranscribe() {
         if (isBusy || item == null) return
         isBusy = true
@@ -267,23 +272,16 @@ class DetailViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             try {
                 val apiKey = dataStore.openAiKey.first()
-                if (apiKey.isNullOrBlank()) {
-                    isBusy = false
-                    return@launch
-                }
+                if (apiKey.isNullOrBlank()) { isBusy = false; return@launch }
 
                 val file = File(item!!.filePath)
                 if (!file.exists()) return@launch
 
-                Toast.makeText(context, "Uploading...", Toast.LENGTH_SHORT).show()
                 val uploadInfo = RetrofitClient.api.getUploadUrl()
-
                 val requestBody = RequestBody.create("audio/mp4".toMediaTypeOrNull(), file)
                 val uploadResponse = RetrofitClient.api.uploadFileToS3(uploadInfo.uploadUrl, requestBody)
 
-                if (!uploadResponse.isSuccessful) throw Exception("S3 Error")
-
-                Toast.makeText(context, "Transcribing...", Toast.LENGTH_SHORT).show()
+                if (!uploadResponse.isSuccessful) throw Exception("S3 Upload Error")
 
                 val request = ArticleRequest(
                     fileKey = uploadInfo.fileKey,
@@ -294,24 +292,23 @@ class DetailViewModel(private val context: Context) : ViewModel() {
 
                 val response = RetrofitClient.api.processAudio(request)
 
-                // ОБНОВЛЕНИЕ ДАННЫХ (Stage 1)
-                // Записываем и в рабочий слой, и в сырой слой
                 title = response.title
                 content = response.content
+                rawText = response.content
 
-                // Сохраняем в модель
                 item?.let { current ->
                     val updated = current.copy(
+                        status = RecordingStatus.TRANSCRIBED,
                         articleTitle = title,
                         articleContent = content,
-                        rawTranscription = content // <--- СОХРАНЯЕМ ИСХОДНИК
+                        rawTranscription = rawText
                     )
                     item = updated
                     saveMetadata(updated)
-                    hasRawText = true // Теперь у нас есть бэкап
+                    hasRawText = true
                 }
 
-                Toast.makeText(context, "Transcribed & Saved", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Transcribed", Toast.LENGTH_SHORT).show()
 
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -322,8 +319,23 @@ class DetailViewModel(private val context: Context) : ViewModel() {
         }
     }
 
+    fun updateContent(newTitle: String, newContent: String) {
+        title = newTitle
+        content = newContent
+        item?.let { current ->
+            val updated = current.copy(articleTitle = newTitle, articleContent = newContent)
+            item = updated
+            saveMetadata(updated)
+        }
+    }
+
+    fun restoreRawText() {
+        content = rawText
+        updateContent(title, content)
+        Toast.makeText(context, "Restored", Toast.LENGTH_SHORT).show()
+    }
+
     fun copyToClipboard() {
-        if (title.isBlank() && content.isBlank()) return
         val fullText = "$title\n\n$content"
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("ComPost", fullText)
@@ -341,18 +353,14 @@ class DetailViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             isBusy = true
             val helper = GoogleServicesHelper(context, googleAccount!!)
-
             val success = when (type) {
                 IntegrationType.CALENDAR -> helper.createCalendarEvent(title, content) != null
                 IntegrationType.GMAIL -> helper.createDraft(title, content) != null
                 IntegrationType.TASKS -> helper.createTask(title, content) != null
                 else -> false
             }
-
             isBusy = false
-            if (success) {
-                Toast.makeText(context, "Sent to ${type.name}", Toast.LENGTH_SHORT).show()
-            }
+            if (success) Toast.makeText(context, "Sent to ${type.name}", Toast.LENGTH_SHORT).show()
         }
     }
 
