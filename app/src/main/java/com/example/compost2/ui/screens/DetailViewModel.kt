@@ -5,7 +5,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.media.MediaPlayer
 import android.net.Uri
-import android.util.Base64
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -37,7 +36,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
@@ -55,6 +55,9 @@ class DetailViewModel(private val context: Context) : ViewModel() {
     var title by mutableStateOf("")
     var content by mutableStateOf("")
 
+    // Есть ли исходник для восстановления?
+    var hasRawText by mutableStateOf(false)
+
     // --- ПЛЕЕР ---
     private var mediaPlayer: MediaPlayer? = null
     private var progressJob: Job? = null
@@ -66,8 +69,6 @@ class DetailViewModel(private val context: Context) : ViewModel() {
     // --- ЛИНЗА И ПРОМПТЫ ---
     var showLens by mutableStateOf(false)
     var prompts by mutableStateOf<List<PromptItem>>(emptyList())
-
-    // Флаг загрузки (для AI операций)
     var isBusy by mutableStateOf(false)
 
     // --- ИНИЦИАЛИЗАЦИЯ ---
@@ -86,13 +87,15 @@ class DetailViewModel(private val context: Context) : ViewModel() {
                     title = loadedItem.articleTitle ?: loadedItem.name
                     content = loadedItem.articleContent ?: ""
 
+                    // Проверяем наличие сырого текста
+                    hasRawText = !loadedItem.rawTranscription.isNullOrBlank()
+
                     initPlayer(file)
                 } catch (e: Exception) { e.printStackTrace() }
             }
         }
     }
 
-    // --- ЛОГИКА ПЛЕЕРА ---
     private fun initPlayer(file: File) {
         mediaPlayer?.release()
         mediaPlayer = MediaPlayer().apply {
@@ -146,11 +149,24 @@ class DetailViewModel(private val context: Context) : ViewModel() {
     fun updateContent(newTitle: String, newContent: String) {
         title = newTitle
         content = newContent
-        // Автосохранение
+        // Автосохранение (rawTranscription не трогаем!)
         item?.let { current ->
-            val updated = current.copy(articleTitle = newTitle, articleContent = newContent)
+            val updated = current.copy(
+                articleTitle = newTitle,
+                articleContent = newContent
+            )
             item = updated
             saveMetadata(updated)
+        }
+    }
+
+    // --- ВОССТАНОВЛЕНИЕ ИСХОДНИКА ---
+    fun restoreRawText() {
+        item?.rawTranscription?.let { raw ->
+            title = item?.articleTitle ?: title
+            content = raw
+            updateContent(title, content)
+            Toast.makeText(context, "Restored to original transcription", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -174,12 +190,15 @@ class DetailViewModel(private val context: Context) : ViewModel() {
             try {
                 val apiKey = dataStore.openAiKey.first()
                 if (apiKey.isNullOrBlank()) {
-                    Toast.makeText(context, "No OpenAI Key in Settings!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "No OpenAI Key!", Toast.LENGTH_SHORT).show()
                     isBusy = false
                     return@launch
                 }
 
-                // 1. Формируем СИСТЕМНЫЙ ПРОМПТ для JSON
+                // ВАЖНО: Мы всегда обрабатываем ТЕКУЩИЙ текст (content),
+                // чтобы можно было применять промпты цепочкой (Translate -> Summarize)
+                // Но если пользователь хочет начать с чистого листа, он нажмет Restore.
+
                 val systemInstruction = """
                     You are an Action Extractor API. 
                     Your goal is to analyze the user text and the user's specific request, then output a JSON object.
@@ -189,21 +208,16 @@ class DetailViewModel(private val context: Context) : ViewModel() {
                       "action_type": "CALENDAR" or "GMAIL" or "NONE",
                       "title": "A short summary title",
                       "body": "The main content formatted for the destination",
-                      "date": "YYYY-MM-DD HH:MM" (only if Calendar action, estimated from text)
+                      "date": "YYYY-MM-DD HH:MM" (only if Calendar action)
                     }
                     
                     USER'S REQUEST: ${prompt.content}
-                    
-                    If the user request implies creating a meeting/event -> action_type = CALENDAR.
-                    If the user request implies sending an email -> action_type = GMAIL.
-                    Otherwise -> action_type = NONE.
                 """.trimIndent()
 
-                // 2. Отправляем запрос
                 val request = ChatRequest(
                     messages = listOf(
                         Message("system", systemInstruction),
-                        Message("user", content) // Отправляем текущий текст транскрипции
+                        Message("user", content)
                     )
                 )
 
@@ -211,10 +225,7 @@ class DetailViewModel(private val context: Context) : ViewModel() {
                 val jsonContent = response.choices.firstOrNull()?.message?.content
 
                 if (jsonContent != null) {
-                    // 3. Парсим JSON
                     val actionData = gson.fromJson(jsonContent, AiActionResponse::class.java)
-
-                    // 4. Применяем действие
                     handleAiAction(actionData)
                 }
 
@@ -230,7 +241,6 @@ class DetailViewModel(private val context: Context) : ViewModel() {
     private fun handleAiAction(data: AiActionResponse) {
         when (data.actionType) {
             "CALENDAR" -> {
-                // Обновляем UI данными от AI (чтобы пользователь видел, что создается)
                 title = data.title ?: title
                 content = "${data.body}\n\n[Date: ${data.date}]"
                 triggerIntegration(IntegrationType.CALENDAR)
@@ -241,17 +251,15 @@ class DetailViewModel(private val context: Context) : ViewModel() {
                 triggerIntegration(IntegrationType.GMAIL)
             }
             else -> {
-                // Если просто текст - обновляем поля
                 title = data.title ?: title
                 content = data.body ?: content
                 Toast.makeText(context, "Text processed", Toast.LENGTH_SHORT).show()
             }
         }
-        // Сохраняем изменения
         updateContent(title, content)
     }
 
-    // --- ПОВТОРНАЯ ТРАНСКРИБАЦИЯ (RAW) ---
+    // --- S3 ТРАНСКРИБАЦИЯ ---
     fun reTranscribe() {
         if (isBusy || item == null) return
         isBusy = true
@@ -259,28 +267,55 @@ class DetailViewModel(private val context: Context) : ViewModel() {
         viewModelScope.launch {
             try {
                 val apiKey = dataStore.openAiKey.first()
-                if (apiKey.isNullOrBlank()) return@launch
+                if (apiKey.isNullOrBlank()) {
+                    isBusy = false
+                    return@launch
+                }
 
                 val file = File(item!!.filePath)
-                val audioBytes = withContext(Dispatchers.IO) { file.readBytes() }
-                val base64 = Base64.encodeToString(audioBytes, Base64.NO_WRAP)
+                if (!file.exists()) return@launch
+
+                Toast.makeText(context, "Uploading...", Toast.LENGTH_SHORT).show()
+                val uploadInfo = RetrofitClient.api.getUploadUrl()
+
+                val requestBody = RequestBody.create("audio/mp4".toMediaTypeOrNull(), file)
+                val uploadResponse = RetrofitClient.api.uploadFileToS3(uploadInfo.uploadUrl, requestBody)
+
+                if (!uploadResponse.isSuccessful) throw Exception("S3 Error")
+
+                Toast.makeText(context, "Transcribing...", Toast.LENGTH_SHORT).show()
 
                 val request = ArticleRequest(
-                    audioBase64 = base64,
+                    fileKey = uploadInfo.fileKey,
+                    audioBase64 = null,
                     prompt = "Transcribe exactly what is said. No formatting.",
                     openaiKey = apiKey
                 )
 
-                val response = RetrofitClient.api.uploadAudio(request)
+                val response = RetrofitClient.api.processAudio(request)
 
+                // ОБНОВЛЕНИЕ ДАННЫХ (Stage 1)
+                // Записываем и в рабочий слой, и в сырой слой
                 title = response.title
                 content = response.content
-                updateContent(title, content)
 
-                Toast.makeText(context, "Transcribed", Toast.LENGTH_SHORT).show()
+                // Сохраняем в модель
+                item?.let { current ->
+                    val updated = current.copy(
+                        articleTitle = title,
+                        articleContent = content,
+                        rawTranscription = content // <--- СОХРАНЯЕМ ИСХОДНИК
+                    )
+                    item = updated
+                    saveMetadata(updated)
+                    hasRawText = true // Теперь у нас есть бэкап
+                }
+
+                Toast.makeText(context, "Transcribed & Saved", Toast.LENGTH_SHORT).show()
 
             } catch (e: Exception) {
                 e.printStackTrace()
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 isBusy = false
             }
@@ -298,7 +333,7 @@ class DetailViewModel(private val context: Context) : ViewModel() {
 
     fun triggerIntegration(type: IntegrationType) {
         val googleAccount = authClient.getSignedInAccount()
-        if (googleAccount == null && (type == IntegrationType.CALENDAR || type == IntegrationType.GMAIL)) {
+        if (googleAccount == null && (type == IntegrationType.CALENDAR || type == IntegrationType.GMAIL || type == IntegrationType.TASKS)) {
             Toast.makeText(context, "Sign in to Google first", Toast.LENGTH_SHORT).show()
             return
         }
@@ -308,13 +343,9 @@ class DetailViewModel(private val context: Context) : ViewModel() {
             val helper = GoogleServicesHelper(context, googleAccount!!)
 
             val success = when (type) {
-                IntegrationType.CALENDAR -> {
-                    // В будущем сюда будем передавать дату из AI
-                    helper.createCalendarEvent(title, content) != null
-                }
-                IntegrationType.GMAIL -> {
-                    helper.createDraft(title, content) != null
-                }
+                IntegrationType.CALENDAR -> helper.createCalendarEvent(title, content) != null
+                IntegrationType.GMAIL -> helper.createDraft(title, content) != null
+                IntegrationType.TASKS -> helper.createTask(title, content) != null
                 else -> false
             }
 

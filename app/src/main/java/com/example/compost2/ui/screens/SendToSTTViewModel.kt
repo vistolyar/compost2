@@ -1,7 +1,6 @@
 package com.example.compost2.ui.screens
 
 import android.content.Context
-import android.util.Base64
 import android.widget.Toast
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -23,7 +22,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,14 +38,11 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
     var recordingItem by mutableStateOf<RecordingItem?>(null)
         private set
 
-    // Список теперь берется из репозитория
     var prompts by mutableStateOf(emptyList<PromptItem>())
         private set
 
-    // Выбранный промпт - теперь это объект
     var selectedPrompt by mutableStateOf<PromptItem?>(null)
 
-    // Состояния для диалога создания промпта
     var showAddDialog by mutableStateOf(false)
     var newPromptTitle by mutableStateOf("")
     var newPromptContent by mutableStateOf("")
@@ -65,7 +62,6 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
 
     private fun loadPrompts() {
         prompts = promptsRepository.getPrompts()
-        // По умолчанию выбираем первый, если он есть
         if (prompts.isNotEmpty() && selectedPrompt == null) {
             selectedPrompt = prompts[0]
         }
@@ -87,7 +83,6 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
         selectedPrompt = prompt
     }
 
-    // Логика добавления нового промпта прямо с этого экрана
     fun openAddDialog() {
         newPromptTitle = ""
         newPromptContent = ""
@@ -109,8 +104,8 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
             lastModified = SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date())
         )
         promptsRepository.addPrompt(newPrompt)
-        loadPrompts() // Обновляем список
-        selectedPrompt = newPrompt // Сразу выбираем созданный
+        loadPrompts()
+        selectedPrompt = newPrompt
         showAddDialog = false
     }
 
@@ -135,32 +130,42 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
                 }
 
                 val file = File(item.filePath)
-
-                val base64Audio = withContext(Dispatchers.IO) {
-                    val bytes = file.readBytes()
-                    Base64.encodeToString(bytes, Base64.NO_WRAP)
+                if (!file.exists()) {
+                    Toast.makeText(context, "File not found", Toast.LENGTH_SHORT).show()
+                    return@launch
                 }
 
-                uploadProgress = 0.3f
+                // --- НОВАЯ ЛОГИКА S3 ---
 
+                // 1. Получаем ссылку
+                uploadProgress = 0.2f
+                val uploadInfo = RetrofitClient.api.getUploadUrl()
+
+                // 2. Грузим файл в облако
+                uploadProgress = 0.4f
+                val requestBody = RequestBody.create("audio/mp4".toMediaTypeOrNull(), file)
+                val uploadResponse = RetrofitClient.api.uploadFileToS3(uploadInfo.uploadUrl, requestBody)
+
+                if (!uploadResponse.isSuccessful) {
+                    throw Exception("S3 Upload failed: ${uploadResponse.code()}")
+                }
+
+                // 3. Отправляем на обработку
+                uploadProgress = 0.7f
                 val request = ArticleRequest(
-                    audioBase64 = base64Audio,
-                    // Отправляем ТЕКСТ (Content) промпта, а не заголовок
+                    fileKey = uploadInfo.fileKey, // Используем ключ
+                    audioBase64 = null,           // Base64 не нужен
                     prompt = currentPrompt.content,
                     openaiKey = savedKey
                 )
 
-                val response = RetrofitClient.api.uploadAudio(request)
+                val response = RetrofitClient.api.processAudio(request)
 
-                uploadProgress = 0.9f
+                uploadProgress = 1.0f
 
                 resultTitle = response.title
                 resultBody = response.content
 
-                // Сохраняем имя использованного промпта в карточку (для истории, если нужно)
-                // (Это логика будет в HomeViewModel при сохранении результата)
-
-                uploadProgress = 1.0f
                 isFinished = true
 
             } catch (e: Exception) {

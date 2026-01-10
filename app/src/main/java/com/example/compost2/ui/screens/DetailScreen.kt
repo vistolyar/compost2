@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -19,7 +20,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,6 +50,13 @@ fun DetailScreen(
                         }
                     },
                     actions = {
+                        // КНОПКА ВОССТАНОВЛЕНИЯ ИСХОДНИКА
+                        if (viewModel.hasRawText) {
+                            IconButton(onClick = { viewModel.restoreRawText() }) {
+                                Icon(Icons.Default.History, contentDescription = "Restore Original", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+
                         if (viewModel.isBusy) {
                             CircularProgressIndicator(
                                 modifier = Modifier.padding(end = 16.dp).size(24.dp),
@@ -60,7 +67,6 @@ fun DetailScreen(
                 )
             },
             bottomBar = {
-                // НИЖНЯЯ ПАНЕЛЬ ДЕЙСТВИЙ (ФИКСИРОВАННАЯ)
                 BottomAppBar(
                     containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 8.dp
@@ -69,17 +75,12 @@ fun DetailScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        // 1. CHOOSE PROMPT (Линза)
                         IconButton(onClick = { viewModel.onOpenLens() }) {
                             Icon(Icons.Default.AutoAwesome, contentDescription = "AI Actions", tint = MaterialTheme.colorScheme.primary)
                         }
-
-                        // 2. RE-TRANSCRIBE
                         IconButton(onClick = { viewModel.reTranscribe() }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Re-Transcribe")
                         }
-
-                        // 3. COPY TEXT
                         IconButton(onClick = { viewModel.copyToClipboard() }) {
                             Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                         }
@@ -94,7 +95,7 @@ fun DetailScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp)
             ) {
-                // 1. КОМПАКТНЫЙ ПЛЕЕР
+                // ПЛЕЕР
                 AudioPlayerCompact(
                     isPlaying = viewModel.isPlaying,
                     sliderPos = viewModel.sliderPosition,
@@ -106,7 +107,7 @@ fun DetailScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 2. ПАНЕЛЬ ИНТЕГРАЦИЙ
+                // ИНТЕГРАЦИИ (ВЕРНУЛ TASKS)
                 Text("Integrations", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -123,10 +124,10 @@ fun DetailScreen(
                         onClick = { viewModel.triggerIntegration(IntegrationType.GMAIL) }
                     )
                     IntegrationButton(
-                        icon = Icons.Default.Public,
-                        label = "Web",
-                        isActive = viewModel.item?.wordpressId != null,
-                        onClick = { viewModel.triggerIntegration(IntegrationType.WORDPRESS) }
+                        icon = Icons.Default.CheckCircle,
+                        label = "Tasks",
+                        isActive = false,
+                        onClick = { viewModel.triggerIntegration(IntegrationType.TASKS) }
                     )
                 }
 
@@ -134,7 +135,7 @@ fun DetailScreen(
                 Divider()
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // 3. ТЕКСТ (Показываем только если он есть)
+                // ТЕКСТ
                 if (viewModel.content.isNotBlank()) {
                     OutlinedTextField(
                         value = viewModel.title,
@@ -162,7 +163,6 @@ fun DetailScreen(
                         )
                     )
                 } else {
-                    // ЗАГЛУШКА, ЕСЛИ ТЕКСТА НЕТ
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -190,7 +190,7 @@ fun DetailScreen(
             }
         }
 
-        // 4. ACTION LENS OVERLAY
+        // LENS OVERLAY
         AnimatedVisibility(
             visible = viewModel.showLens,
             enter = fadeIn(),

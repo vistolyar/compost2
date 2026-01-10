@@ -1,7 +1,6 @@
 package com.example.compost2.ui.screens
 
 import android.content.Context
-import android.util.Base64
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -19,6 +18,8 @@ import com.example.compost2.domain.RecordingStatus
 import com.google.gson.Gson
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody
 import java.io.File
 import java.io.FileReader
 import java.io.FileWriter
@@ -92,16 +93,33 @@ class HomeViewModel(private val context: Context) : ViewModel() {
         val job = viewModelScope.launch(Dispatchers.IO) {
             try {
                 val savedKey = dataStore.openAiKey.first() ?: return@launch
-                val promptText = promptsRepository.getPrompts().find { it.title == item.promptName }?.content ?: "Just transcribe"
+                val promptText = promptsRepository.getPrompts().find { it.title == item.promptName }?.content ?: "Transcribe exactly what is said."
 
                 val file = File(item.filePath)
                 if (!file.exists()) return@launch
 
-                val base64 = Base64.encodeToString(file.readBytes(), Base64.NO_WRAP)
+                // --- НОВАЯ ЛОГИКА S3 UPLOAD ---
 
-                val response = RetrofitClient.api.uploadAudio(
-                    ArticleRequest(base64, promptText, savedKey)
+                // 1. Получаем ссылку
+                val uploadInfo = RetrofitClient.api.getUploadUrl()
+
+                // 2. Грузим файл
+                val requestBody = RequestBody.create("audio/mp4".toMediaTypeOrNull(), file)
+                val uploadResponse = RetrofitClient.api.uploadFileToS3(uploadInfo.uploadUrl, requestBody)
+
+                if (!uploadResponse.isSuccessful) {
+                    throw Exception("Upload failed: ${uploadResponse.code()}")
+                }
+
+                // 3. Отправляем на процессинг (используем processAudio вместо uploadAudio)
+                val request = ArticleRequest(
+                    fileKey = uploadInfo.fileKey,
+                    audioBase64 = null,
+                    prompt = promptText,
+                    openaiKey = savedKey
                 )
+
+                val response = RetrofitClient.api.processAudio(request)
 
                 withContext(Dispatchers.Main) {
                     onAiResultReceived(item, response.title, response.content)
@@ -109,6 +127,7 @@ class HomeViewModel(private val context: Context) : ViewModel() {
             } catch (e: Exception) {
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
+                    // Если ошибка, возвращаем статус SAVED, чтобы можно было повторить
                     updateItemStatus(item, RecordingStatus.SAVED)
                 }
             } finally {
@@ -127,7 +146,6 @@ class HomeViewModel(private val context: Context) : ViewModel() {
         )
     }
 
-    // Эта функция нужна для HomeScreen (кнопка Cancel на карточке)
     fun cancelProcessing(item: RecordingItem) {
         activeJobs[item.id]?.cancel()
         activeJobs.remove(item.id)
@@ -135,8 +153,9 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     }
 
     fun onAiResultReceived(item: RecordingItem, title: String, content: String) {
+        // Меняем статус на TRANSCRIBED согласно новой логике
         val newItem = item.copy(
-            status = RecordingStatus.READY,
+            status = RecordingStatus.TRANSCRIBED,
             articleTitle = title,
             articleContent = content
         )

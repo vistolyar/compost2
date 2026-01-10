@@ -22,12 +22,13 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontWeight // <--- ДОБАВЛЕН ЭТОТ ИМПОРТ
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import coil.compose.AsyncImage
 import com.example.compost2.domain.RecordingStatus
+import com.example.compost2.ui.components.HeroPentagonButton
 import com.example.compost2.ui.components.RecordingCard
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
@@ -64,8 +65,6 @@ fun HomeScreen(
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val sheetState = rememberModalBottomSheetState()
-    var showBottomSheet by remember { mutableStateOf(false) }
     val pullRefreshState = rememberPullToRefreshState()
 
     if (pullRefreshState.isRefreshing) {
@@ -155,7 +154,7 @@ fun HomeScreen(
                 )
 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
-                Text("API Settings (Legacy)", modifier = Modifier.padding(start = 16.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
+                Text("API Settings", modifier = Modifier.padding(start = 16.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
                 NavigationDrawerItem(
                     label = { Text("OpenAI API Key") },
                     selected = false,
@@ -174,48 +173,53 @@ fun HomeScreen(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("ComPost") },
+                    title = { Text("ComPost", style = MaterialTheme.typography.headlineSmall) },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
                             Icon(Icons.Default.Menu, null)
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
                 )
             },
             floatingActionButton = {
-                FloatingActionButton(onClick = {
-                    onNavigateToRecorder()
-                }) {
-                    Icon(Icons.Default.Add, null)
-                }
-            }
+                HeroPentagonButton(
+                    onClick = { onNavigateToRecorder() },
+                    modifier = Modifier.padding(bottom = 20.dp)
+                )
+            },
+            floatingActionButtonPosition = FabPosition.Center
         ) { paddingValues ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(paddingValues)
                     .nestedScroll(pullRefreshState.nestedScrollConnection)
-                    // --- ОБРАБОТКА ЖЕСТОВ ---
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures { change, dragAmount ->
                             change.consume()
-
-                            // Свайп ВЛЕВО -> Открыть Рекордер
                             if (dragAmount < -20) {
                                 onNavigateToRecorder()
                             }
-
-                            // Свайп ВПРАВО -> Открыть Меню
                             if (dragAmount > 20) {
                                 scope.launch { drawerState.open() }
                             }
                         }
                     }
             ) {
-                LazyColumn(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        top = paddingValues.calculateTopPadding() + 16.dp,
+                        bottom = paddingValues.calculateBottomPadding() + 100.dp,
+                        start = 16.dp,
+                        end = 16.dp
+                    )
+                ) {
                     if (!pullRefreshState.isRefreshing && viewModel.recordings.isEmpty()) {
                         item {
-                            Text("No recordings yet. Press + to start.", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                                Text("No recordings yet.", color = Color.Gray)
+                            }
                         }
                     }
 
@@ -225,7 +229,7 @@ fun HomeScreen(
                             onClick = {
                                 when (item.status) {
                                     RecordingStatus.SAVED -> onNavigateToPlayer(item.id)
-                                    RecordingStatus.PROCESSING -> { /* Ждем */ }
+                                    RecordingStatus.PROCESSING -> { }
                                     RecordingStatus.READY -> onNavigateToPublish(item.id)
                                     RecordingStatus.PUBLISHED -> onNavigateToPublish(item.id)
                                     RecordingStatus.TRANSCRIBED -> onNavigateToPublish(item.id)
@@ -243,20 +247,14 @@ fun HomeScreen(
                         )
                     }
                 }
-                PullToRefreshContainer(state = pullRefreshState, modifier = Modifier.align(Alignment.TopCenter))
-            }
 
-            if (showBottomSheet) {
-                ModalBottomSheet(onDismissRequest = { showBottomSheet = false }, sheetState = sheetState) {
-                    Column(modifier = Modifier.padding(16.dp).padding(bottom = 32.dp)) {
-                        ExtendedFloatingActionButton(
-                            onClick = { showBottomSheet = false; onNavigateToRecorder() },
-                            icon = { Icon(Icons.Default.Mic, null) },
-                            text = { Text("Record Voice") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+                // ИСПРАВЛЕНИЕ:
+                // Мы вернули индикатор в основной Box и УБРАЛИ padding.
+                // Теперь он будет сидеть наверху (скрытый) и появляться только при свайпе вниз.
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
             }
         }
     }
