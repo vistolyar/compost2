@@ -8,6 +8,7 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -40,8 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.compost2.domain.RecordingStatus
 import com.example.compost2.ui.components.ActionLensButton
 import com.example.compost2.ui.components.PlayerWidget
-import com.example.compost2.ui.theme.ActionPurple
-import com.example.compost2.ui.theme.MontserratFontFamily // ОБНОВЛЕННЫЙ ИМПОРТ
+import com.example.compost2.ui.theme.* // Импортируем все цвета (AppPrimary и др.)
 import kotlin.math.abs
 
 const val LOREM_IPSUM = """
@@ -93,7 +93,8 @@ fun DetailScreen(
 
             if (viewModel.hasRawText) {
                 IconButton(onClick = { viewModel.restoreRawText() }) {
-                    Icon(Icons.Default.History, contentDescription = "Restore", tint = ActionPurple)
+                    // ИСПРАВЛЕНО: ActionPurple -> AppPrimary
+                    Icon(Icons.Default.History, contentDescription = "Restore", tint = AppPrimary)
                 }
             }
         }
@@ -209,7 +210,7 @@ fun DetailScreen(
                             value = viewModel.content,
                             onValueChange = { viewModel.updateContent(viewModel.title, it) },
                             textStyle = TextStyle(
-                                fontFamily = MontserratFontFamily, // ЯВНАЯ ССЫЛКА НА ШРИФТ
+                                fontFamily = MontserratFontFamily,
                                 fontWeight = FontWeight.Normal,
                                 fontSize = 16.sp,
                                 lineHeight = 26.sp,
@@ -237,7 +238,7 @@ fun DetailScreen(
             }
         }
 
-        // 3. RAW TEXT MODAL (ОБНОВЛЕННЫЙ ЛЕЙАУТ)
+        // 3. RAW TEXT MODAL
         AnimatedVisibility(
             visible = viewModel.showRawTextModal,
             enter = scaleIn(
@@ -269,7 +270,7 @@ fun DetailScreen(
                     elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
                 ) {
                     Column(modifier = Modifier.padding(24.dp)) {
-                        // ЗАГОЛОВОК (Центрирован)
+                        // ЗАГОЛОВОК
                         Text(
                             text = "Raw Transcription",
                             style = MaterialTheme.typography.titleMedium,
@@ -294,26 +295,27 @@ fun DetailScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // ФУТЕР (Две кнопки)
+                        // ФУТЕР
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // Кнопка пересоздания (Фиолетовая)
+                            // Кнопка пересоздания (Фиолетовая -> AppPrimary)
                             Button(
                                 onClick = {
                                     viewModel.reTranscribe()
                                     viewModel.showRawTextModal = false
                                 },
                                 modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = ActionPurple)
+                                // ИСПРАВЛЕНО: ActionPurple -> AppPrimary
+                                colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
                             ) {
                                 Icon(Icons.Default.Refresh, null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Re-transcribe", fontSize = 11.sp)
                             }
 
-                            // Кнопка закрытия (Серая)
+                            // Кнопка закрытия
                             Button(
                                 onClick = { viewModel.showRawTextModal = false },
                                 modifier = Modifier.weight(1f),
@@ -355,7 +357,8 @@ fun DetailScreen(
 
         if (viewModel.isBusy) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = ActionPurple)
+                // ИСПРАВЛЕНО: ActionPurple -> AppPrimary
+                CircularProgressIndicator(color = AppPrimary)
             }
         }
     }

@@ -19,7 +19,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,12 +32,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.compost2.domain.IntegrationType
 import com.example.compost2.domain.PromptItem
-import com.example.compost2.ui.components.RoundedPentagonBox // Используем новый компонент
+import com.example.compost2.ui.components.*
+import com.example.compost2.ui.theme.*
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PromptSettingsScreen(
     onNavigateBack: () -> Unit,
@@ -46,42 +49,70 @@ fun PromptSettingsScreen(
 ) {
     val context = LocalContext.current
     val viewModel: PromptSettingsViewModel = viewModel(factory = PromptSettingsViewModel.provideFactory(context))
+    val lifecycleOwner = LocalLifecycleOwner.current
 
     var showSortDialog by remember { mutableStateOf(false) }
 
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.loadPrompts()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Prompts", style = MaterialTheme.typography.headlineSmall) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            AppTopBar(
+                title = "Prompts",
+                onBackClick = onNavigateBack
             )
         },
+        containerColor = AppScreenBg,
         bottomBar = {
             AnimatedVisibility(
                 visible = viewModel.isSelectionMode,
                 enter = slideInVertically { it },
                 exit = slideOutVertically { it }
             ) {
-                BottomAppBar(containerColor = Color.White, tonalElevation = 10.dp) {
+                // НИЖНЯЯ ПАНЕЛЬ С ДЕЙСТВИЯМИ
+                BottomAppBar(containerColor = AppWhite, tonalElevation = 10.dp) {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = { viewModel.toggleSelectionMode() }) {
-                            Text("Cancel", color = Color.Black, fontWeight = FontWeight.Bold)
-                        }
-                        Text("${viewModel.selectedIds.size} selected", style = MaterialTheme.typography.titleSmall)
-                        Button(
-                            onClick = { viewModel.deleteSelected() },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                        ) {
-                            Text("Delete")
+                        // Слева - Отмена
+                        AppGhostButton("Cancel", onClick = { viewModel.toggleSelectionMode() })
+
+                        // Справа - Ряд действий
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Activate (Зеленый текст)
+                            AppGhostButton(
+                                text = "Activate",
+                                onClick = { viewModel.updateSelectedStatus(true) },
+                                textColor = AppSuccess
+                            )
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Draft (Желтый текст)
+                            AppGhostButton(
+                                text = "Draft",
+                                onClick = { viewModel.updateSelectedStatus(false) },
+                                textColor = AppWarning
+                            )
+
+                            Spacer(modifier = Modifier.width(8.dp))
+
+                            // Delete (Красный текст)
+                            AppGhostButton(
+                                text = "Delete",
+                                onClick = { viewModel.deleteSelected() },
+                                textColor = AppDanger
+                            )
                         }
                     }
                 }
@@ -94,27 +125,22 @@ fun PromptSettingsScreen(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 contentPadding = PaddingValues(bottom = 100.dp)
             ) {
-                // --- HEADER ---
+                // Header (Add / Sort)
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // КНОПКА ADD PROMPT
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .clickable { onEditPrompt(null) }
-                                .padding(vertical = 8.dp)
+                            modifier = Modifier.clickable { onEditPrompt(null) }.padding(vertical = 8.dp)
                         ) {
-                            // ИСПРАВЛЕНИЕ: Используем RoundedPentagonBox с темно-серым фоном
                             RoundedPentagonBox(
                                 modifier = Modifier.size(48.dp),
-                                color = Color(0xFF333333), // Темно-серый
-                                cornerRadius = 8.dp // Скругление
+                                color = Color(0xFF333333),
+                                cornerRadius = 8.dp
                             ) {
-                                // Жирный белый плюс
                                 Canvas(modifier = Modifier.size(20.dp)) {
                                     val strokeWidth = 4.dp.toPx()
                                     val center = size.width / 2
@@ -123,37 +149,30 @@ fun PromptSettingsScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                "ADD PROMPT",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 12.sp,
-                                color = Color(0xFF333333)
-                            )
+                            Text("ADD PROMPT", style = MaterialTheme.typography.labelSmall, fontSize = 12.sp, color = AppTextPrimary)
                         }
 
                         Box(
                             modifier = Modifier
-                                .border(1.dp, Color(0xFFE0E0E5), RoundedCornerShape(12.dp))
+                                .border(1.dp, AppInactive, RoundedCornerShape(12.dp))
+                                .background(AppWhite, RoundedCornerShape(12.dp))
                                 .clickable { showSortDialog = true }
                                 .padding(horizontal = 16.dp, vertical = 8.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Sort, null, modifier = Modifier.size(16.dp), tint = Color.Gray)
+                                Icon(Icons.Default.Sort, null, modifier = Modifier.size(16.dp), tint = AppTextPrimary)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Sort", style = MaterialTheme.typography.labelSmall, color = Color.Black)
+                                Text("Sort", style = MaterialTheme.typography.labelSmall, color = AppTextPrimary)
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(10.dp))
                 }
 
-                // --- СПИСОК ---
                 items(viewModel.prompts, key = { it.id }) { prompt ->
                     val isSelected = viewModel.selectedIds.contains(prompt.id)
-                    PromptLibraryCard(
-                        prompt = prompt,
-                        isSelectionMode = viewModel.isSelectionMode,
-                        isSelected = isSelected,
+
+                    AppCard(
                         onClick = {
                             if (viewModel.isSelectionMode) viewModel.toggleSelection(prompt.id)
                             else onEditPrompt(prompt.id)
@@ -163,8 +182,62 @@ fun PromptSettingsScreen(
                                 viewModel.toggleSelectionMode()
                                 viewModel.toggleSelection(prompt.id)
                             }
+                        },
+                        isSelected = isSelected
+                    ) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            AnimatedVisibility(
+                                visible = viewModel.isSelectionMode,
+                                enter = expandVertically() + fadeIn(),
+                                exit = shrinkVertically() + fadeOut()
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(end = 12.dp).size(24.dp).clip(CircleShape)
+                                        .background(if (isSelected) AppPrimary else AppWhite)
+                                        .border(2.dp, if (isSelected) AppPrimary else AppInactive, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (isSelected) Icon(Icons.Default.Check, null, tint = AppWhite, modifier = Modifier.size(16.dp))
+                                }
+                            }
+
+                            RoundedPentagonBox(
+                                modifier = Modifier.size(48.dp),
+                                color = AppScreenBg,
+                                cornerRadius = 8.dp
+                            ) {
+                                val (icon, color) = getIntegrationIconAndColor(prompt.integrationType)
+                                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
+                            }
+
+                            Spacer(modifier = Modifier.width(16.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                    Text(text = prompt.title, style = MaterialTheme.typography.titleMedium, color = AppTextPrimary, modifier = Modifier.weight(1f))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    StatusIndicatorDot(isActive = prompt.isActive)
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = prompt.content,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AppTextPrimary.copy(alpha = 0.6f),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(text = "USED ${prompt.usageCount} TIMES", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = AppInactive)
+                                    if (prompt.lastUsed != null) {
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(text = "•  LAST: ${prompt.lastUsed}", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = AppInactive)
+                                    }
+                                }
+                            }
                         }
-                    )
+                    }
                 }
             }
         }
@@ -182,89 +255,9 @@ fun PromptSettingsScreen(
                 }
             },
             confirmButton = {},
-            dismissButton = { TextButton(onClick = { showSortDialog = false }) { Text("Close") } }
+            dismissButton = { TextButton(onClick = { showSortDialog = false }) { Text("Close") } },
+            containerColor = AppWhite
         )
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-fun PromptLibraryCard(
-    prompt: PromptItem,
-    isSelectionMode: Boolean,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit
-) {
-    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
-    val backgroundColor = if (isSelected) Color(0xFFF0F0FF) else Color.White
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .border(2.dp, borderColor, RoundedCornerShape(20.dp)),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(modifier = Modifier.padding(20.dp), verticalAlignment = Alignment.Top) {
-            AnimatedVisibility(
-                visible = isSelectionMode,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .padding(end = 12.dp).size(24.dp).clip(CircleShape)
-                        .background(if (isSelected) MaterialTheme.colorScheme.primary else Color.White)
-                        .border(2.dp, if (isSelected) MaterialTheme.colorScheme.primary else Color.LightGray, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isSelected) Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                }
-            }
-
-            // ИСПРАВЛЕНИЕ: Используем RoundedPentagonBox как подложку (рамку)
-            RoundedPentagonBox(
-                modifier = Modifier.size(48.dp),
-                color = Color(0xFFF4F4F6), // Светло-серый фон
-                cornerRadius = 8.dp
-            ) {
-                val (icon, color) = when (prompt.integrationType) {
-                    IntegrationType.CALENDAR -> Icons.Default.DateRange to Color(0xFF34A853)
-                    IntegrationType.GMAIL -> Icons.Default.Email to Color(0xFFEA4335)
-                    IntegrationType.TASKS -> Icons.Default.CheckCircle to Color(0xFF4285F4)
-                    IntegrationType.WORDPRESS -> Icons.Default.Public to Color(0xFF21759B)
-                    else -> Icons.Default.Description to Color.Black
-                }
-                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
-            }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = prompt.title, style = MaterialTheme.typography.titleSmall, color = Color.Black)
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = prompt.content,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF888888),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 16.sp
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "USED ${prompt.usageCount} TIMES", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = Color(0xFFCCCCCC))
-                    if (prompt.lastUsed != null) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "•  LAST: ${prompt.lastUsed}", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = Color(0xFFCCCCCC))
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -281,15 +274,15 @@ fun SortOptionRow(label: String, onAsc: () -> Unit, onDesc: () -> Unit) {
             SortArrowButton(isUp = false, onClick = onDesc)
         }
     }
-    Divider(color = Color(0xFFF0F0F2))
+    Divider(color = AppInactive.copy(alpha = 0.3f))
 }
 
 @Composable
 fun SortArrowButton(isUp: Boolean, onClick: () -> Unit) {
     Box(
-        modifier = Modifier.size(32.dp).background(Color(0xFFF2F2F5), RoundedCornerShape(8.dp)).clickable { onClick() },
+        modifier = Modifier.size(32.dp).background(AppScreenBg, RoundedCornerShape(8.dp)).clickable { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        Icon(imageVector = if (isUp) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Gray)
+        Icon(imageVector = if (isUp) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(16.dp), tint = AppInactive)
     }
 }

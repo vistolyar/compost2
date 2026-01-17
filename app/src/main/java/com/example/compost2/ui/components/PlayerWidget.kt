@@ -27,14 +27,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.compost2.domain.RecordingStatus
-import com.example.compost2.ui.theme.ActionPurple
-import com.example.compost2.ui.theme.StatusDone
-import com.example.compost2.ui.theme.StatusError
-import com.example.compost2.ui.theme.StatusProcessing
-import com.example.compost2.ui.theme.TextWhite
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.example.compost2.ui.theme.* // Импортируем новую палитру
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,29 +53,30 @@ fun PlayerWidget(
     )
 
     val dateText = remember(dateTimestamp, isExpanded) {
-        val date = Date(dateTimestamp)
+        val date = java.util.Date(dateTimestamp)
         if (isExpanded) {
-            SimpleDateFormat("dd MMMM yyyy", Locale.getDefault()).format(date)
+            java.text.SimpleDateFormat("dd MMMM yyyy", java.util.Locale.getDefault()).format(date)
         } else {
-            SimpleDateFormat("dd-MMM", Locale.US).format(date)
+            java.text.SimpleDateFormat("dd-MMM", java.util.Locale.US).format(date)
         }
     }
 
+    // ИСПОЛЬЗУЕМ НОВЫЕ ЦВЕТА
     val (statusColor, statusText, actionLabel) = when (status) {
         RecordingStatus.TRANSCRIBED, RecordingStatus.PUBLISHED, RecordingStatus.READY ->
-            Triple(StatusDone, "TRANSCRIBED", "Show")
+            Triple(AppSuccess, "TRANSCRIBED", "Show")
         RecordingStatus.PROCESSING ->
-            Triple(StatusProcessing, "PROCESSING...", "Cancel")
+            Triple(AppWarning, "PROCESSING...", "Cancel")
         else ->
-            Triple(StatusError, "RECORDED", "Transcribe")
+            Triple(AppDanger, "RECORDED", "Transcribe")
     }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp) // Увеличили высоту для комфортного размещения
+            .height(180.dp)
             .clip(RoundedCornerShape(32.dp))
-            .background(ActionPurple)
+            .background(AppPrimary) // Был ActionPurple
     ) {
         // КНОПКА SEND
         Column(
@@ -106,7 +100,7 @@ fun PlayerWidget(
                         lineTo(w * 0.05f, h * 0.38f)
                         close()
                     }
-                    drawPath(path = path, color = TextWhite, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+                    drawPath(path = path, color = AppWhite, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)) // Был TextWhite
                     val arrowPath = Path().apply {
                         moveTo(w * 0.35f, h * 0.58f)
                         lineTo(w * 0.50f, h * 0.43f)
@@ -114,11 +108,11 @@ fun PlayerWidget(
                         moveTo(w * 0.50f, h * 0.43f)
                         lineTo(w * 0.50f, h * 0.75f)
                     }
-                    drawPath(path = arrowPath, color = TextWhite, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+                    drawPath(path = arrowPath, color = AppWhite, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)) // Был TextWhite
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
-            Text("SEND", color = TextWhite, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+            Text("SEND", color = AppWhite, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) // Был TextWhite
         }
 
         // ШТОРКА (MAIN INFO)
@@ -131,7 +125,7 @@ fun PlayerWidget(
                     topEnd = if (isExpanded) 32.dp else 0.dp,
                     bottomEnd = if (isExpanded) 32.dp else 0.dp
                 ))
-                .background(Color(0xFFE2E2E7))
+                .background(Color(0xFFE2E2E7)) // Цвет шторки можно вынести в AppColors, но пока оставим как в дизайне
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
@@ -143,9 +137,8 @@ fun PlayerWidget(
                 modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth(),
                 verticalArrangement = Arrangement.Center
             ) {
-                // ВЕРХНЯЯ ЧАСТЬ: Имя файла и Дата (Логика меняется от состояния)
+                // ВЕРХНЯЯ ЧАСТЬ
                 if (isExpanded) {
-                    // РАЗВЕРНУТО: Имя файла сверху на всю ширину
                     Text(
                         text = fileName,
                         style = MaterialTheme.typography.labelSmall,
@@ -157,7 +150,6 @@ fun PlayerWidget(
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
                 } else {
-                    // СВЕРНУТО: Имя файла (2 строки) + Дата справа
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -174,7 +166,7 @@ fun PlayerWidget(
                             modifier = Modifier.weight(1f).padding(end = 8.dp)
                         )
                         Text(
-                            text = dateText, // Короткая дата (09-Jan)
+                            text = dateText,
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.Black.copy(alpha = 0.3f),
                             textAlign = TextAlign.End,
@@ -185,7 +177,6 @@ fun PlayerWidget(
 
                 // ПЛЕЕР
                 if (isExpanded) {
-                    // --- РАЗВЕРНУТЫЙ ВИД ---
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
@@ -204,7 +195,6 @@ fun PlayerWidget(
                         )
                     }
 
-                    // Таймеры
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(start = 52.dp, top = 2.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -215,7 +205,6 @@ fun PlayerWidget(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // НИЖНЯЯ ЧАСТЬ: Статус (слева) + Полная дата (справа)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth(),
@@ -228,15 +217,14 @@ fun PlayerWidget(
                                 text = actionLabel,
                                 style = MaterialTheme.typography.labelSmall,
                                 fontSize = 10.sp,
-                                color = ActionPurple,
+                                color = AppPrimary, // Был ActionPurple
                                 textDecoration = TextDecoration.Underline,
                                 modifier = Modifier.clickable { onStatusActionClick() }
                             )
                         }
 
-                        // Полная дата (внизу справа)
                         Text(
-                            text = dateText, // 10 January 2026
+                            text = dateText,
                             style = MaterialTheme.typography.labelSmall,
                             fontSize = 10.sp,
                             color = Color.Black.copy(alpha = 0.3f),
@@ -245,7 +233,6 @@ fun PlayerWidget(
                     }
 
                 } else {
-                    // --- СВЕРНУТЫЙ ВИД (КОМПАКТНЫЙ) ---
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()

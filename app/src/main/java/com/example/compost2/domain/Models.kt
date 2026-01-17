@@ -32,10 +32,12 @@ data class PromptItem(
     val title: String,
     val content: String,
     val integrationType: IntegrationType = IntegrationType.NONE,
-    val isDraft: Boolean = false, // Оставляем поле для совместимости, но в UI игнорируем
-    val lastModified: String,
+    val isDraft: Boolean = false, // Оставляем для совместимости
 
-    // НОВЫЕ ПОЛЯ
+    // НОВОЕ ПОЛЕ: Статус активности
+    val isActive: Boolean = true,
+
+    val lastModified: String,
     val usageCount: Int = 0,
-    val lastUsed: String? = null // Храним дату последнего использования
+    val lastUsed: String? = null
 )

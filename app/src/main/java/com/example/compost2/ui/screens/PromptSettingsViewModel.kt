@@ -22,27 +22,30 @@ class PromptSettingsViewModel(private val repository: PromptsRepository) : ViewM
     var prompts by mutableStateOf<List<PromptItem>>(emptyList())
         private set
 
-    // --- SELECTION MODE ---
     var isSelectionMode by mutableStateOf(false)
         private set
 
-    // Используем mutableStateListOf для реактивности списка ID
     val selectedIds = mutableStateListOf<String>()
 
     init {
         loadPrompts()
     }
 
-    private fun loadPrompts() {
+    fun loadPrompts() {
         prompts = repository.getPrompts()
     }
 
-    // --- CRUD ---
     fun getPromptById(id: String): PromptItem? {
         return prompts.find { it.id == id }
     }
 
-    fun savePrompt(id: String?, title: String, content: String, type: IntegrationType) {
+    fun savePrompt(
+        id: String?,
+        title: String,
+        content: String,
+        type: IntegrationType,
+        isActive: Boolean
+    ) {
         if (title.isBlank()) return
 
         val date = SimpleDateFormat("dd MMM", Locale.getDefault()).format(Date())
@@ -54,6 +57,7 @@ class PromptSettingsViewModel(private val repository: PromptsRepository) : ViewM
                 content = content,
                 integrationType = type,
                 lastModified = date,
+                isActive = isActive,
                 usageCount = 0,
                 lastUsed = "Never"
             )
@@ -64,55 +68,58 @@ class PromptSettingsViewModel(private val repository: PromptsRepository) : ViewM
                 title = title,
                 content = content,
                 integrationType = type,
-                lastModified = date
+                lastModified = date,
+                isActive = isActive
             )
             repository.updatePrompt(updated)
         }
         loadPrompts()
     }
 
-    // --- SELECTION LOGIC ---
+    fun deletePrompt(id: String) {
+        repository.deletePrompt(id)
+        loadPrompts()
+    }
+
     fun toggleSelectionMode() {
         isSelectionMode = !isSelectionMode
-        if (!isSelectionMode) {
-            selectedIds.clear()
-        }
+        if (!isSelectionMode) selectedIds.clear()
     }
 
     fun toggleSelection(id: String) {
         if (selectedIds.contains(id)) {
             selectedIds.remove(id)
-            if (selectedIds.isEmpty()) {
-                isSelectionMode = false
-            }
+            if (selectedIds.isEmpty()) isSelectionMode = false
         } else {
             selectedIds.add(id)
         }
     }
 
-    fun selectAll() {
+    fun deleteSelected() {
+        selectedIds.forEach { id -> repository.deletePrompt(id) }
         selectedIds.clear()
-        selectedIds.addAll(prompts.map { it.id })
+        isSelectionMode = false
+        loadPrompts()
     }
 
-    fun deleteSelected() {
+    // НОВЫЙ МЕТОД: Массовое изменение статуса
+    fun updateSelectedStatus(isActive: Boolean) {
         selectedIds.forEach { id ->
-            repository.deletePrompt(id)
+            val existing = getPromptById(id)
+            if (existing != null) {
+                repository.updatePrompt(existing.copy(isActive = isActive))
+            }
         }
         selectedIds.clear()
         isSelectionMode = false
         loadPrompts()
     }
 
-    // --- SORTING ---
     fun sortPrompts(criteria: String) {
-        // criteria: "date", "alpha", "usage"
         val sorted = when (criteria) {
             "alpha" -> prompts.sortedBy { it.title }
             "usage" -> prompts.sortedByDescending { it.usageCount }
-            // Для упрощения сортируем по lastModified строкой,
-            // в идеале нужно хранить Long timestamp
-            else -> prompts // Default (как в JSON)
+            else -> prompts
         }
         prompts = sorted
     }

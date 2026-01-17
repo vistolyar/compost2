@@ -4,9 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.*
 import androidx.compose.runtime.*
-// ВАЖНЫЕ ИМПОРТЫ ДЛЯ РАБОТЫ ДЕЛЕГАТОВ (by mutableStateOf)
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -26,7 +23,6 @@ import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
-// Вынесли Enum наружу, чтобы он был доступен везде без ошибок
 enum class ActionState { IDLE, RECORDING, SELECTION }
 
 class RecorderViewModel(
@@ -53,7 +49,12 @@ class RecorderViewModel(
     private var accumulated = 0L
 
     init {
-        prompts = promptsRepository.getPrompts()
+        loadActivePrompts()
+    }
+
+    private fun loadActivePrompts() {
+        // ИСПРАВЛЕНИЕ: Фильтруем только isActive = true
+        prompts = promptsRepository.getPrompts().filter { it.isActive }
     }
 
     fun startCapture(context: Context, dictaphone: Boolean) {
@@ -112,7 +113,6 @@ class RecorderViewModel(
                 val finalFile = File(file.parent, newName)
                 file.renameTo(finalFile)
 
-                // Сохраняем метаданные со статусом PROCESSING (Sent)
                 val item = RecordingItem(
                     id = finalFile.name,
                     name = newName,

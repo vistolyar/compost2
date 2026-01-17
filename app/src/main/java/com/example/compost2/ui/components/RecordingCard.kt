@@ -1,19 +1,14 @@
 package com.example.compost2.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-// ВНИМАНИЕ: Импорты Material 3
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,38 +19,45 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.compost2.domain.RecordingItem
 import com.example.compost2.domain.RecordingStatus
+import com.example.compost2.ui.theme.AppCardBg // Импортируем наш цвет
+import com.example.compost2.ui.theme.AppPrimary
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun RecordingCard(
     item: RecordingItem,
     onClick: () -> Unit,
     onSendToSTT: () -> Unit,
     onCancel: () -> Unit,
-    onDelete: () -> Unit,
+    onDelete: () -> Unit, // Это действие повесим на долгий тап
     onPublish: () -> Unit,
     onOpenUrl: (String) -> Unit,
     onSettings: () -> Unit
 ) {
     Card(
-        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp),
+            .padding(vertical = 6.dp)
+            // Добавляем поддержку долгого тапа для удаления
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onDelete
+            ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(20.dp), // Унифицированное скругление
+        colors = CardDefaults.cardColors(
+            containerColor = AppCardBg // ИСПРАВЛЕНИЕ: Явно используем #E2E1E6
+        )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(20.dp) // Унифицированный отступ
         ) {
             // Заголовок
             val displayTitle = item.articleTitle ?: item.name
             Text(
                 text = displayTitle,
-                // Используем стиль из темы. Благодаря CompositionLocalProvider шрифт должен быть Montserrat
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -78,7 +80,7 @@ fun RecordingCard(
             )
 
             Spacer(modifier = Modifier.height(12.dp))
-            Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+            Divider(color = MaterialTheme.colorScheme.surfaceVariant) // Разделитель
             Spacer(modifier = Modifier.height(12.dp))
 
             // Нижний ряд
@@ -92,13 +94,13 @@ fun RecordingCard(
                         imageVector = Icons.Default.Mic,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = AppPrimary
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "VOICE",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
+                        color = AppPrimary
                     )
                 }
 

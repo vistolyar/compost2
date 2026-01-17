@@ -2,14 +2,12 @@ package com.example.compost2.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.FormatBold
-import androidx.compose.material.icons.filled.FormatItalic
-import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,6 +20,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.compost2.ui.theme.AppInactive
+import com.example.compost2.ui.theme.AppTextPrimary
 import com.example.compost2.ui.theme.MontserratFontFamily
 
 @Composable
@@ -29,22 +29,24 @@ fun AppTextEditor(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "Start writing..."
+    placeholder: String = "Start writing...",
+    showJsonTab: Boolean = false, // Показывать ли вторую вкладку
+    onCopy: () -> Unit // Действие копирования
 ) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, Color(0xFFF0F0F2), RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
+            .border(1.dp, AppInactive.copy(alpha = 0.3f), RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
             .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
             .background(Color.White)
     ) {
-        // --- STICKY HEADER STYLE ---
+        // --- HEADER ---
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color.White)
         ) {
-            // Вкладки (Декоративные)
+            // Вкладки
             Row(
                 modifier = Modifier.padding(start = 25.dp, top = 15.dp, bottom = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp)
@@ -52,30 +54,41 @@ fun AppTextEditor(
                 Text(
                     text = "PROMPT TEXT",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color.Black
+                    color = AppTextPrimary
                 )
-                Text(
-                    text = "JSON PREVIEW", // Для промптов это логичнее, чем HTML
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Black.copy(alpha = 0.3f)
-                )
+
+                if (showJsonTab) {
+                    Text(
+                        text = "JSON PREVIEW",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTextPrimary.copy(alpha = 0.3f)
+                    )
+                }
             }
 
-            // Тулбар
+            // Тулбар (Только кнопка копирования справа)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFFF8F8FA))
-                    .border(width = 1.dp, color = Color(0xFFF0F0F2))
-                    .padding(horizontal = 25.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
+                    .border(width = 1.dp, color = AppInactive.copy(alpha = 0.2f))
+                    .padding(horizontal = 25.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.End, // Всё вправо
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.FormatListBulleted, null, tint = Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
-                Icon(Icons.Default.FormatBold, null, tint = Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
-                Icon(Icons.Default.FormatItalic, null, tint = Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.weight(1f))
-                Icon(Icons.Default.ContentCopy, null, tint = Color.Gray.copy(alpha = 0.5f), modifier = Modifier.size(18.dp))
+                // Кнопка копирования
+                Box(
+                    modifier = Modifier
+                        .clickable { onCopy() }
+                        .padding(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ContentCopy,
+                        contentDescription = "Copy",
+                        tint = Color.Gray,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
 
@@ -83,7 +96,7 @@ fun AppTextEditor(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f) // Занимает всё оставшееся место
+                .weight(1f)
                 .padding(25.dp)
         ) {
             if (value.isEmpty()) {
@@ -102,7 +115,7 @@ fun AppTextEditor(
                     fontWeight = FontWeight.Normal,
                     fontSize = 16.sp,
                     lineHeight = 26.sp,
-                    color = Color.Black
+                    color = AppTextPrimary
                 ),
                 modifier = Modifier.fillMaxSize()
             )

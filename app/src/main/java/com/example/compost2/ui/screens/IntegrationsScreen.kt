@@ -6,18 +6,19 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector // ДОБАВЛЕН ИМПОРТ
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.compost2.domain.IntegrationType
+import com.example.compost2.ui.components.AppTopBar // Используем AppTopBar
+import com.example.compost2.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,16 +32,12 @@ fun IntegrationsScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Integrations", style = MaterialTheme.typography.headlineSmall) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            AppTopBar(
+                title = "Integrations",
+                onBackClick = onNavigateBack
             )
-        }
+        },
+        containerColor = AppScreenBg
     ) { paddingValues ->
         LazyColumn(
             modifier = Modifier
@@ -72,13 +69,13 @@ fun IntegrationItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = AppCardBg),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(20.dp)
     ) {
         Row(
             modifier = Modifier
-                .padding(16.dp)
+                .padding(20.dp)
                 .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -88,7 +85,6 @@ fun IntegrationItemCard(
                     .background(color.copy(alpha = 0.1f), RoundedCornerShape(12.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                // Явно указываем imageVector, чтобы убрать неоднозначность
                 Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
             }
 
@@ -109,12 +105,21 @@ fun IntegrationItemCard(
             Switch(
                 checked = isEnabled,
                 onCheckedChange = { onToggle() },
-                enabled = !isLocked
+                enabled = !isLocked,
+                colors = SwitchDefaults.colors(
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                    checkedThumbColor = Color.White,
+                    disabledCheckedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                    disabledCheckedThumbColor = Color.White.copy(alpha = 0.9f),
+                    uncheckedTrackColor = Color(0xFFE0E0E5),
+                    uncheckedBorderColor = Color.Transparent
+                )
             )
         }
     }
 }
 
+// ПУБЛИЧНЫЕ ХЕЛПЕРЫ (Используются и в PromptEditScreen)
 fun getIntegrationTitle(type: IntegrationType): String {
     return when(type) {
         IntegrationType.NONE -> "Text Processing"
@@ -125,8 +130,6 @@ fun getIntegrationTitle(type: IntegrationType): String {
     }
 }
 
-// Дублируем хелпер здесь или выносим в общий файл Utils.kt
-// Важно возвращать ImageVector явно
 fun getIntegrationIconAndColor(type: IntegrationType): Pair<ImageVector, Color> {
     return when (type) {
         IntegrationType.CALENDAR -> Icons.Default.DateRange to Color(0xFF34A853)
