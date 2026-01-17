@@ -8,7 +8,6 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
@@ -42,15 +41,11 @@ import com.example.compost2.domain.RecordingStatus
 import com.example.compost2.ui.components.ActionLensButton
 import com.example.compost2.ui.components.PlayerWidget
 import com.example.compost2.ui.theme.ActionPurple
+import com.example.compost2.ui.theme.MontserratFontFamily // ОБНОВЛЕННЫЙ ИМПОРТ
 import kotlin.math.abs
 
-// Длинный текст для теста скролла
 const val LOREM_IPSUM = """
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-
-Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Curabitur pretium tincidunt lacus. Nulla gravida orci a odio. Nullam varius, turpis et commodo pharetra, est eros bibendum elit, nec luctus magna felis sollicitudin mauris.
-
-Integer in mauris eu nibh euismod gravida. Duo reges: constructio interrete. Sed nimis multa. Virum mihi, Camena, insece versutum. Et quidem, inquit, vehementer errabat; Si longus, levis; si gravis, brevis. Atque haec coniunctio confusioque virtutum tamen a philosophis ratione quadam distinguitur.
+Lorem ipsum dolor sit amet...
 """
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -214,7 +209,7 @@ fun DetailScreen(
                             value = viewModel.content,
                             onValueChange = { viewModel.updateContent(viewModel.title, it) },
                             textStyle = TextStyle(
-                                fontFamily = com.example.compost2.ui.theme.Montserrat,
+                                fontFamily = MontserratFontFamily, // ЯВНАЯ ССЫЛКА НА ШРИФТ
                                 fontWeight = FontWeight.Normal,
                                 fontSize = 16.sp,
                                 lineHeight = 26.sp,
@@ -223,7 +218,7 @@ fun DetailScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                     } else {
-                        Text("Ready to transcribe...", color = Color.LightGray)
+                        Text("Ready to transcribe...", color = Color.LightGray, fontFamily = MontserratFontFamily)
                     }
 
                     Spacer(modifier = Modifier.height(30.dp))

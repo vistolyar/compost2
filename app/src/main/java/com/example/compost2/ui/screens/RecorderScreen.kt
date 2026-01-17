@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.compost2.ui.components.ActionLensButton
-import com.example.compost2.ui.components.MontserratBold // Убедись, что импорт правильный (из твоего файла ActionLensComponent)
+// Убрали импорт MontserratFontFamily, он теперь должен приходить из темы
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 
@@ -42,14 +42,9 @@ fun RecorderScreen(onNavigateToHome: () -> Unit) {
     val context = LocalContext.current
     val viewModel: RecorderViewModel = viewModel(factory = RecorderViewModel.provideFactory(context))
 
-    // --- ПАРАМЕТРЫ ЭКРАНА И ЖЕСТОВ ---
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
-
-    // Порог для активации "Hold to Cancel" (60dp)
     val cancelThresholdPx = with(density) { 60.dp.toPx() }
-
-    // Порог для обычного свайпа назад (40% ширины экрана)
     val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
     val backGestureThresholdPx = screenWidthPx * 0.4f
 
@@ -57,22 +52,16 @@ fun RecorderScreen(onNavigateToHome: () -> Unit) {
     var isCancelUIActive by remember { mutableStateOf(false) }
     var cancelProgress by remember { mutableFloatStateOf(0f) }
 
-    // --- ЛОГИКА ТАЙМЕРА (Только если есть сессия записи) ---
     LaunchedEffect(isCancelUIActive) {
         if (isCancelUIActive) {
             val startTime = System.currentTimeMillis()
-            val duration = 1000L // 1 секунда на удержание
-
+            val duration = 1000L
             while (isActive && cancelProgress < 1f) {
                 val elapsed = System.currentTimeMillis() - startTime
                 cancelProgress = (elapsed / duration.toFloat()).coerceIn(0f, 1f)
-                delay(16) // ~60 FPS
+                delay(16)
             }
-
             if (cancelProgress >= 1f) {
-                // --- УСПЕШНАЯ ОТМЕНА ---
-
-                // 1. Вибрация
                 @Suppress("DEPRECATION")
                 val v = context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as Vibrator
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -80,27 +69,16 @@ fun RecorderScreen(onNavigateToHome: () -> Unit) {
                 } else {
                     v.vibrate(50)
                 }
-
-                // 2. Остановка сервиса (файл останется temp_recording и перезапишется в следующий раз)
-                if (viewModel.isRecording) {
-                    viewModel.pauseCapture(context)
-                }
-
-                // 3. Мгновенный выход
+                if (viewModel.isRecording) viewModel.pauseCapture(context)
                 onNavigateToHome()
             }
         } else {
-            // Сброс таймера, если палец отпустили
             cancelProgress = 0f
         }
     }
 
-    // --- ОБЫЧНАЯ ЛОГИКА ЭКРАНА ---
-
     LaunchedEffect(viewModel.isReadyForSTT) {
-        if (viewModel.isReadyForSTT) {
-            onNavigateToHome()
-        }
+        if (viewModel.isReadyForSTT) onNavigateToHome()
     }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
@@ -115,62 +93,37 @@ fun RecorderScreen(onNavigateToHome: () -> Unit) {
         }
     }
 
-    // ГЛАВНЫЙ КОНТЕЙНЕР
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
-            // ДЕТЕКТОР ЖЕСТОВ
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = {
-                        dragOffset = 0f
-                        isCancelUIActive = false
-                    },
+                    onDragStart = { dragOffset = 0f; isCancelUIActive = false },
                     onDragEnd = {
-                        // Если это был простой свайп назад в режиме ожидания
-                        if (!viewModel.hasRecordingSession && dragOffset > backGestureThresholdPx) {
-                            onNavigateToHome()
-                        }
-
-                        // Сброс состояний
-                        dragOffset = 0f
-                        isCancelUIActive = false
-                        cancelProgress = 0f
+                        if (!viewModel.hasRecordingSession && dragOffset > backGestureThresholdPx) onNavigateToHome()
+                        dragOffset = 0f; isCancelUIActive = false; cancelProgress = 0f
                     },
-                    onDragCancel = {
-                        dragOffset = 0f
-                        isCancelUIActive = false
-                        cancelProgress = 0f
-                    }
+                    onDragCancel = { dragOffset = 0f; isCancelUIActive = false; cancelProgress = 0f }
                 ) { change, dragAmount ->
                     change.consume()
                     dragOffset += dragAmount.x
-
                     if (viewModel.hasRecordingSession) {
-                        // РЕЖИМ ЗАПИСИ: Логика кольца отмены
-                        // Активируем UI только при свайпе вправо > 60dp
-                        if (dragOffset > cancelThresholdPx) {
-                            if (!isCancelUIActive) isCancelUIActive = true
-                        } else {
-                            if (isCancelUIActive) isCancelUIActive = false
-                        }
+                        if (dragOffset > cancelThresholdPx) { if (!isCancelUIActive) isCancelUIActive = true }
+                        else { if (isCancelUIActive) isCancelUIActive = false }
                     }
-                    // Если сессии нет, мы просто копим dragOffset для проверки в onDragEnd
                 }
             }
     ) {
-        // 1. ТАЙМЕР И СТАТУС
+        // ТАЙМЕР
         Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 60.dp),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 60.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // ИСПРАВЛЕНИЕ: Убрали явный fontFamily. Теперь берется displayLarge из Theme -> Type.kt
             Text(
                 text = viewModel.formattedTime,
-                fontSize = 72.sp,
-                fontWeight = FontWeight.W900,
+                style = MaterialTheme.typography.displayLarge,
                 color = Color.White
             )
             Text(
@@ -182,8 +135,6 @@ fun RecorderScreen(onNavigateToHome: () -> Unit) {
             )
         }
 
-        // 2. ЦЕНТРАЛЬНАЯ КНОПКА (ЛИНЗА)
-        // Скрываем, когда активирован режим отмены
         AnimatedVisibility(
             visible = !isCancelUIActive,
             enter = fadeIn(),
@@ -196,11 +147,8 @@ fun RecorderScreen(onNavigateToHome: () -> Unit) {
                     .pointerInput(viewModel.controlState) {
                         detectTapGestures(
                             onDoubleTap = {
-                                if (viewModel.controlState == ActionState.RECORDING) {
-                                    viewModel.stopForSelection(context)
-                                } else if (viewModel.controlState == ActionState.SELECTION) {
-                                    viewModel.startCapture(context, true)
-                                }
+                                if (viewModel.controlState == ActionState.RECORDING) viewModel.stopForSelection(context)
+                                else if (viewModel.controlState == ActionState.SELECTION) viewModel.startCapture(context, true)
                             },
                             onTap = {
                                 if (viewModel.controlState != ActionState.SELECTION) {
@@ -209,17 +157,12 @@ fun RecorderScreen(onNavigateToHome: () -> Unit) {
                                 }
                             },
                             onLongPress = {
-                                if (viewModel.controlState != ActionState.SELECTION && !viewModel.isRecording) {
-                                    checkPermissionAndStart(false)
-                                }
+                                if (viewModel.controlState != ActionState.SELECTION && !viewModel.isRecording) checkPermissionAndStart(false)
                             },
                             onPress = {
                                 val startTime = System.currentTimeMillis()
                                 tryAwaitRelease()
-                                val duration = System.currentTimeMillis() - startTime
-                                if (duration > 500 && viewModel.isRecording && !viewModel.isDictaphoneMode) {
-                                    viewModel.pauseCapture(context)
-                                }
+                                if (System.currentTimeMillis() - startTime > 500 && viewModel.isRecording && !viewModel.isDictaphoneMode) viewModel.pauseCapture(context)
                             }
                         )
                     },
@@ -230,55 +173,39 @@ fun RecorderScreen(onNavigateToHome: () -> Unit) {
                     prompts = viewModel.prompts,
                     amplitude = viewModel.currentAmplitude,
                     onResume = { viewModel.startCapture(context, true) },
-                    onSelect = { prompt ->
-                        viewModel.onPromptSelected(context, prompt)
-                    }
+                    onSelect = { prompt -> viewModel.onPromptSelected(context, prompt) }
                 )
             }
         }
 
-        // 3. ПОДСКАЗКА СНИЗУ
         AnimatedVisibility(
             visible = !isCancelUIActive,
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
             exit = fadeOut()
         ) {
             Text(
-                text = if (viewModel.controlState == ActionState.SELECTION)
-                    "CHOOSE ACTION TO FINISH"
-                else if (viewModel.hasRecordingSession)
-                    "SWIPE RIGHT TO CANCEL" // Подсказка меняется, если есть что отменять
-                else
-                    "DOUBLE TAP TO OPEN LENS",
+                text = if (viewModel.controlState == ActionState.SELECTION) "CHOOSE ACTION TO FINISH"
+                else if (viewModel.hasRecordingSession) "SWIPE RIGHT TO CANCEL"
+                else "DOUBLE TAP TO OPEN LENS",
                 style = MaterialTheme.typography.labelSmall,
                 color = Color.White.copy(alpha = 0.3f),
                 letterSpacing = 1.sp
             )
         }
 
-        // 4. КОМПОНЕНТ ОТМЕНЫ (Только если есть сессия)
         if (viewModel.hasRecordingSession) {
             CancelWidget(
                 isVisible = isCancelUIActive,
                 progress = cancelProgress,
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 40.dp)
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 40.dp)
             )
         }
     }
 }
 
-// --- ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ ---
-
 @Composable
-fun CancelWidget(
-    isVisible: Boolean,
-    progress: Float,
-    modifier: Modifier = Modifier
-) {
+fun CancelWidget(isVisible: Boolean, progress: Float, modifier: Modifier = Modifier) {
     val errorColor = MaterialTheme.colorScheme.error
-
     AnimatedVisibility(
         visible = isVisible,
         enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it }),
@@ -286,52 +213,17 @@ fun CancelWidget(
         modifier = modifier
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // КРУГОВОЙ ПРОГРЕСС
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier.size(70.dp)
-            ) {
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(70.dp)) {
                 Canvas(modifier = Modifier.fillMaxSize()) {
-                    // Фоновый круг
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.1f),
-                        style = Stroke(width = 4.dp.toPx())
-                    )
-                    // Круг заполнения
-                    drawArc(
-                        color = errorColor,
-                        startAngle = -90f,
-                        sweepAngle = progress * 360f,
-                        useCenter = false,
-                        style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-                    )
+                    drawCircle(color = Color.White.copy(alpha = 0.1f), style = Stroke(width = 4.dp.toPx()))
+                    drawArc(color = errorColor, startAngle = -90f, sweepAngle = progress * 360f, useCenter = false, style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round))
                 }
-                Text(
-                    text = "✕",
-                    fontSize = 24.sp,
-                    color = errorColor,
-                    fontWeight = FontWeight.Bold
-                )
+                Text(text = "✕", fontSize = 24.sp, color = errorColor, fontWeight = FontWeight.Bold)
             }
-
             Spacer(modifier = Modifier.width(20.dp))
-
-            // ТЕКСТ
             Column {
-                Text(
-                    text = "cancel",
-                    color = errorColor,
-                    fontSize = 18.sp,
-                    fontFamily = MontserratBold,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = if (progress < 1f) "HOLD 2s" else "DONE",
-                    color = Color.White.copy(alpha = 0.5f),
-                    fontSize = 10.sp,
-                    fontFamily = MontserratBold,
-                    letterSpacing = 1.sp
-                )
+                Text(text = "cancel", color = errorColor, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text(text = if (progress < 1f) "HOLD 2s" else "DONE", color = Color.White.copy(alpha = 0.5f), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             }
         }
     }

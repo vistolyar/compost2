@@ -10,14 +10,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.compost2.ui.screens.ApiKeyScreen
-import com.example.compost2.ui.screens.DetailScreen
-import com.example.compost2.ui.screens.HomeScreen
-import com.example.compost2.ui.screens.HomeViewModel
-import com.example.compost2.ui.screens.PromptEditScreen
-import com.example.compost2.ui.screens.PromptSettingsScreen
-import com.example.compost2.ui.screens.RecorderScreen
-import com.example.compost2.ui.screens.SettingsScreen
+import com.example.compost2.ui.screens.*
 
 @Composable
 fun AppNavigation() {
@@ -28,86 +21,34 @@ fun AppNavigation() {
 
     NavHost(navController = navController, startDestination = Screen.Home.route) {
 
-        // --- ГЛАВНЫЙ ЭКРАН ---
-        composable(
-            route = Screen.Home.route,
-            enterTransition = {
-                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(400))
-            },
-            exitTransition = {
-                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(400))
-            }
-        ) {
+        // ... HOME ...
+        composable(Screen.Home.route) {
             HomeScreen(
                 viewModel = homeViewModel,
-                onNavigateToRecorder = {
-                    navController.navigate(Screen.Recorder.route)
-                },
-                onNavigateToPlayer = { fileName ->
-                    navController.navigate("detail/$fileName")
-                },
-                onNavigateToSendSTT = { fileName ->
-                    navController.navigate("detail/$fileName")
-                },
-                onNavigateToPublish = { fileName ->
-                    navController.navigate("detail/$fileName")
-                },
-                onNavigateToPrompts = {
-                    navController.navigate("prompt_settings")
-                },
-                onNavigateToApiKey = { type ->
-                    navController.navigate(Screen.ApiKeySettings.createRoute(type))
-                },
-                onNavigateToSettings = {
-                    navController.navigate(Screen.Settings.route)
-                }
+                onNavigateToRecorder = { navController.navigate(Screen.Recorder.route) },
+                onNavigateToPlayer = { fileName -> navController.navigate("detail/$fileName") },
+                onNavigateToSendSTT = { fileName -> navController.navigate("detail/$fileName") },
+                onNavigateToPublish = { fileName -> navController.navigate("detail/$fileName") },
+                onNavigateToPrompts = { navController.navigate("prompt_settings") },
+                onNavigateToApiKey = { type -> navController.navigate(Screen.ApiKeySettings.createRoute(type)) },
+                // onNavigateToSettings теперь ведет на Интеграции
+                onNavigateToSettings = { navController.navigate(Screen.Integrations.route) }
             )
         }
 
-        // --- ЗАПИСЬ ---
-        composable(
-            route = Screen.Recorder.route,
-            enterTransition = {
-                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(400))
-            },
-            exitTransition = {
-                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(400))
-            }
-        ) {
-            RecorderScreen(
-                onNavigateToHome = {
-                    navController.popBackStack(Screen.Home.route, inclusive = false)
-                }
-            )
-        }
+        // ... ДРУГИЕ ЭКРАНЫ (Recorder, Detail, PromptSettings) ...
+        composable(Screen.Recorder.route) { RecorderScreen { navController.popBackStack(Screen.Home.route, false) } }
 
-        // --- ЕДИНЫЙ ЭКРАН ПРОСМОТРА (DETAIL) ---
         composable(
             route = "detail/{fileName}",
-            arguments = listOf(navArgument("fileName") { type = NavType.StringType }),
-            // ИЗМЕНЕНИЕ: Теперь анимация горизонтальная (слайд справа)
-            enterTransition = {
-                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300))
-            },
-            // ИЗМЕНЕНИЕ: При выходе (Back) экран уезжает вправо (как при свайпе)
-            exitTransition = {
-                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300))
-            },
-            popEnterTransition = {
-                slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, animationSpec = tween(300))
-            },
-            popExitTransition = {
-                slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, animationSpec = tween(300))
-            }
+            arguments = listOf(navArgument("fileName") { type = NavType.StringType })
         ) { backStackEntry ->
-            val fileName = backStackEntry.arguments?.getString("fileName") ?: ""
             DetailScreen(
-                fileName = fileName,
+                fileName = backStackEntry.arguments?.getString("fileName") ?: "",
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        // --- СПИСОК ПРОМПТОВ ---
         composable("prompt_settings") {
             PromptSettingsScreen(
                 onNavigateBack = { navController.popBackStack() },
@@ -118,41 +59,43 @@ fun AppNavigation() {
             )
         }
 
-        // --- РЕДАКТОР ПРОМПТА ---
+        // РЕДАКТОР ПРОМПТА
         composable(
             route = "prompt_edit?id={id}",
-            arguments = listOf(navArgument("id") {
-                type = NavType.StringType
-                nullable = true
-                defaultValue = null
-            })
+            arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null })
         ) { backStackEntry ->
             val promptId = backStackEntry.arguments?.getString("id")
             PromptEditScreen(
                 promptId = promptId,
+                onNavigateBack = { navController.popBackStack() },
+                onNavigateToIntegrations = { navController.navigate(Screen.Integrations.route) } // Переход
+            )
+        }
+
+        // ЭКРАН ИНТЕГРАЦИЙ
+        composable(Screen.Integrations.route) {
+            IntegrationsScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        // --- НАСТРОЙКИ КЛЮЧЕЙ ---
+        // API KEY
         composable(
             route = Screen.ApiKeySettings.route,
             arguments = listOf(navArgument("serviceType") { type = NavType.StringType })
         ) { backStackEntry ->
-            val serviceType = backStackEntry.arguments?.getString("serviceType") ?: "openai"
             ApiKeyScreen(
-                serviceType = serviceType,
+                serviceType = backStackEntry.arguments?.getString("serviceType") ?: "openai",
                 onNavigateBack = { navController.popBackStack() }
             )
         }
 
-        // --- ЭКРАН НАСТРОЕК GOOGLE ---
+        // Settings (Старый экран настроек Google, теперь может быть переименован или удален,
+        // но пока оставим его, если он используется где-то еще, или переиспользуем для Google Sign In)
+        // Если "onNavigateToSettings" из Home ведет на Integrations, то этот роут временно "сирота".
+        // Оставим для совместимости
         composable(Screen.Settings.route) {
-            SettingsScreen(
-                onNavigateBack = {
-                    navController.popBackStack()
-                }
-            )
+            SettingsScreen(onNavigateBack = { navController.popBackStack() })
         }
     }
 }

@@ -14,11 +14,11 @@ data class RecordingItem(
     val status: RecordingStatus,
     val filePath: String,
 
-    // Рабочий текст (Current Output) - то, что мы редактируем и отправляем в интеграции
+    // Рабочий текст (Current Output)
     val articleTitle: String? = null,
     val articleContent: String? = null,
 
-    // НОВОЕ ПОЛЕ: Сырой исходник (Source of Truth) - никогда не меняется после транскрибации
+    // Сырой исходник (Source of Truth)
     val rawTranscription: String? = null,
 
     val promptName: String? = null,
@@ -32,6 +32,10 @@ data class PromptItem(
     val title: String,
     val content: String,
     val integrationType: IntegrationType = IntegrationType.NONE,
-    val isDraft: Boolean = false,
-    val lastModified: String
+    val isDraft: Boolean = false, // Оставляем поле для совместимости, но в UI игнорируем
+    val lastModified: String,
+
+    // НОВЫЕ ПОЛЯ
+    val usageCount: Int = 0,
+    val lastUsed: String? = null // Храним дату последнего использования
 )

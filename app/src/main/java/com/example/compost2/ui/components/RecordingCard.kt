@@ -6,18 +6,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+// ВНИМАНИЕ: Импорты Material 3
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import com.example.compost2.domain.IntegrationType
 import com.example.compost2.domain.RecordingItem
 import com.example.compost2.domain.RecordingStatus
 
@@ -26,7 +30,6 @@ import com.example.compost2.domain.RecordingStatus
 fun RecordingCard(
     item: RecordingItem,
     onClick: () -> Unit,
-    // Эти параметры пока оставляем для совместимости, но визуально они уходят в DetailScreen
     onSendToSTT: () -> Unit,
     onCancel: () -> Unit,
     onDelete: () -> Unit,
@@ -48,12 +51,12 @@ fun RecordingCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // 1. ЗАГОЛОВОК (Крупно)
+            // Заголовок
             val displayTitle = item.articleTitle ?: item.name
             Text(
                 text = displayTitle,
+                // Используем стиль из темы. Благодаря CompositionLocalProvider шрифт должен быть Montserrat
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 color = MaterialTheme.colorScheme.onSurface
@@ -61,8 +64,7 @@ fun RecordingCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 2. СТАТУС ТРАНСКРИПЦИИ (Мелко)
-            // Пример: "Transcribed • 10:45 AM" (Дату добавим позже, пока статус)
+            // Статус
             val statusText = when (item.status) {
                 RecordingStatus.PROCESSING -> "Processing..."
                 RecordingStatus.SAVED -> "Audio Saved"
@@ -79,13 +81,12 @@ fun RecordingCard(
             Divider(color = MaterialTheme.colorScheme.surfaceVariant)
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 3. НИЖНИЙ РЯД (Badge Row)
+            // Нижний ряд
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // ЛЕВАЯ ЧАСТЬ: Тип исходника (Микрофон)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Mic,
@@ -95,34 +96,26 @@ fun RecordingCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Voice",
+                        text = "VOICE",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
 
-                // ПРАВАЯ ЧАСТЬ: Иконки интеграций
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // Пока мы не внедрили логику сохранения интеграций в JSON,
-                    // визуализируем логику "на лету" для демонстрации.
-                    // В будущем тут будет item.completedIntegrations.forEach { ... }
-
                     val hasIntegrations = item.wordpressId != null || item.publicUrl != null
 
                     if (hasIntegrations) {
-                        // Если есть WP
                         if (item.wordpressId != null) {
-                            IntegrationBadge(Icons.Default.Public, Color(0xFF2196F3)) // Blue
+                            IntegrationBadge(Icons.Default.Public, Color(0xFF2196F3))
                         }
-                        // Если есть ссылка (считаем это пока признаком публикации)
                         if (item.publicUrl != null) {
                             IntegrationBadge(Icons.Default.Link, Color.Gray)
                         }
                     } else {
-                        // Если ничего нет - серая иконка текста
                         IntegrationBadge(Icons.Default.Description, Color.LightGray)
                     }
                 }

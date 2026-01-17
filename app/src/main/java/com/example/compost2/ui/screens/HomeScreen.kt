@@ -2,6 +2,7 @@ package com.example.compost2.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -18,17 +19,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import coil.compose.AsyncImage
 import com.example.compost2.domain.RecordingStatus
 import com.example.compost2.ui.components.HeroPentagonButton
+import com.example.compost2.ui.components.PentagonShape
 import com.example.compost2.ui.components.RecordingCard
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
@@ -45,7 +50,7 @@ fun HomeScreen(
     onNavigateToPublish: (String) -> Unit,
     onNavigateToPrompts: () -> Unit,
     onNavigateToApiKey: (String) -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit // В AppNavigation это теперь ведет на Integrations
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -78,15 +83,15 @@ fun HomeScreen(
     if (viewModel.itemToDelete != null) {
         AlertDialog(
             onDismissRequest = { viewModel.cancelDelete() },
-            title = { Text("Delete Recording") },
-            text = { Text("Are you sure you want to delete this? This action cannot be undone.") },
+            title = { Text("Delete Recording", style = MaterialTheme.typography.titleLarge) },
+            text = { Text("Are you sure you want to delete this?", style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 TextButton(onClick = { viewModel.confirmDelete() }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text("Delete", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.cancelDelete() }) { Text("Cancel") }
+                TextButton(onClick = { viewModel.cancelDelete() }) { Text("Cancel", style = MaterialTheme.typography.labelLarge) }
             }
         )
     }
@@ -94,79 +99,187 @@ fun HomeScreen(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
-                Text("ComPost Menu", modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.headlineSmall)
-                Divider()
-
-                if (googleAccount == null) {
-                    NavigationDrawerItem(
-                        label = { Text("Sign in with Google") },
-                        selected = false,
-                        icon = { Icon(Icons.Default.AccountCircle, null) },
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                            onNavigateToSettings()
-                        }
-                    )
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                scope.launch { drawerState.close() }
-                                onNavigateToSettings()
+            ModalDrawerSheet(
+                drawerContainerColor = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.width(300.dp)
+            ) {
+                // --- 1. ПРОФИЛЬ (Header) ---
+                Column(modifier = Modifier.padding(start = 30.dp, end = 30.dp, top = 60.dp, bottom = 30.dp)) {
+                    if (googleAccount == null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(50.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFE0E0E5)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Person, null, tint = Color.Gray)
                             }
-                            .padding(horizontal = 12.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (googleAccount?.photoUrl != null) {
-                            AsyncImage(
-                                model = googleAccount!!.photoUrl,
-                                contentDescription = "Avatar",
-                                modifier = Modifier.size(32.dp).clip(CircleShape)
+                            Spacer(modifier = Modifier.width(15.dp))
+                            Text(
+                                text = "Sign In",
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.clickable {
+                                    scope.launch { drawerState.close() }
+                                    // Пока "Settings" здесь ведет на старые настройки Google (логин)
+                                    // В будущем можно разделить логин и интеграции
+                                    onNavigateToSettings()
+                                }
                             )
-                        } else {
-                            Icon(Icons.Default.AccountCircle, null, modifier = Modifier.size(32.dp), tint = MaterialTheme.colorScheme.primary)
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = googleAccount?.displayName ?: "User",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (googleAccount?.photoUrl != null) {
+                                AsyncImage(
+                                    model = googleAccount!!.photoUrl,
+                                    contentDescription = "Avatar",
+                                    modifier = Modifier.size(50.dp).clip(CircleShape)
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(50.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFE0E0E5)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = googleAccount?.displayName?.take(1) ?: "U",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Color.DarkGray
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(15.dp))
+                            Column {
+                                Text(
+                                    text = googleAccount?.displayName ?: "User",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color.Black
+                                )
+                                Text(
+                                    text = googleAccount?.email ?: "",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
+                Divider(color = Color(0xFFF0F0F2), thickness = 1.dp)
 
-                NavigationDrawerItem(
-                    label = { Text("Prompts") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Edit, null) },
-                    onClick = { scope.launch { drawerState.close() }; onNavigateToPrompts() }
-                )
-                NavigationDrawerItem(
-                    label = { Text(if (viewModel.isDarkTheme) "Theme: Dark" else "Theme: Light") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.DarkMode, null) },
-                    onClick = { viewModel.toggleTheme() }
-                )
+                // --- 2. ОСНОВНЫЕ ПУНКТЫ ---
+                Column(modifier = Modifier.padding(horizontal = 15.dp)) {
+                    NavigationDrawerItem(
+                        label = { Text("Prompts", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold) },
+                        selected = false,
+                        icon = { Icon(Icons.Default.Edit, null, modifier = Modifier.size(20.dp)) },
+                        onClick = { scope.launch { drawerState.close() }; onNavigateToPrompts() },
+                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                    )
 
-                Divider(modifier = Modifier.padding(vertical = 8.dp))
-                Text("API Settings", modifier = Modifier.padding(start = 16.dp, bottom = 8.dp), style = MaterialTheme.typography.titleSmall)
-                NavigationDrawerItem(
-                    label = { Text("OpenAI API Key") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Key, null) },
-                    onClick = { scope.launch { drawerState.close() }; onNavigateToApiKey("openai") }
-                )
-                NavigationDrawerItem(
-                    label = { Text("WordPress Settings") },
-                    selected = false,
-                    icon = { Icon(Icons.Default.Key, null) },
-                    onClick = { scope.launch { drawerState.close() }; onNavigateToApiKey("wordpress") }
-                )
+                    NavigationDrawerItem(
+                        label = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Theme", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
+                                Switch(
+                                    checked = viewModel.isDarkTheme,
+                                    onCheckedChange = { viewModel.toggleTheme() },
+                                    modifier = Modifier.scale(0.8f)
+                                )
+                            }
+                        },
+                        selected = false,
+                        icon = { Icon(Icons.Default.DarkMode, null, modifier = Modifier.size(20.dp)) },
+                        onClick = { viewModel.toggleTheme() },
+                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                    )
+                }
+
+                // --- 3. ИНТЕГРАЦИИ (Row of Pentagons) ---
+                Column(modifier = Modifier.padding(start = 30.dp, end = 30.dp, top = 25.dp)) {
+                    Text(
+                        text = "INTEGRATIONS",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF999999),
+                        modifier = Modifier.padding(bottom = 15.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(15.dp)
+                    ) {
+                        DrawerPentagonIcon(
+                            icon = Icons.Default.Email,
+                            color = Color(0xFFEA4335),
+                            onClick = { }
+                        )
+                        DrawerPentagonIcon(
+                            icon = Icons.Default.DateRange,
+                            color = Color(0xFF34A853),
+                            onClick = { }
+                        )
+                        DrawerPentagonIcon(
+                            icon = Icons.Default.CheckCircle,
+                            color = Color(0xFF4285F4),
+                            onClick = { }
+                        )
+
+                        // Кнопка ADD (Простой плюс)
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .clickable {
+                                    scope.launch { drawerState.close() }
+                                    // Теперь эта кнопка ведет на экран Интеграций
+                                    onNavigateToSettings()
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = "Add Integration",
+                                tint = Color.DarkGray,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(25.dp))
+
+                // --- 4. API SETTINGS ---
+                Column(modifier = Modifier.padding(horizontal = 15.dp)) {
+                    Text(
+                        text = "API SETTINGS",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF999999),
+                        modifier = Modifier.padding(start = 15.dp, bottom = 8.dp)
+                    )
+
+                    NavigationDrawerItem(
+                        label = { Text("OpenAI API Key", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold) },
+                        selected = false,
+                        icon = { Icon(Icons.Default.Key, null, modifier = Modifier.size(20.dp)) },
+                        onClick = { scope.launch { drawerState.close() }; onNavigateToApiKey("openai") },
+                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                    )
+                    NavigationDrawerItem(
+                        label = { Text("WordPress Settings", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold) },
+                        selected = false,
+                        icon = { Icon(Icons.Default.Public, null, modifier = Modifier.size(20.dp)) },
+                        onClick = { scope.launch { drawerState.close() }; onNavigateToApiKey("wordpress") },
+                        colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent)
+                    )
+                }
             }
         }
     ) {
@@ -197,12 +310,8 @@ fun HomeScreen(
                     .pointerInput(Unit) {
                         detectHorizontalDragGestures { change, dragAmount ->
                             change.consume()
-                            if (dragAmount < -20) {
-                                onNavigateToRecorder()
-                            }
-                            if (dragAmount > 20) {
-                                scope.launch { drawerState.open() }
-                            }
+                            if (dragAmount < -20) onNavigateToRecorder()
+                            if (dragAmount > 20) scope.launch { drawerState.open() }
                         }
                     }
             ) {
@@ -218,7 +327,7 @@ fun HomeScreen(
                     if (!pullRefreshState.isRefreshing && viewModel.recordings.isEmpty()) {
                         item {
                             Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("No recordings yet.", color = Color.Gray)
+                                Text("No recordings yet.", style = MaterialTheme.typography.bodyLarge, color = Color.Gray)
                             }
                         }
                     }
@@ -248,14 +357,37 @@ fun HomeScreen(
                     }
                 }
 
-                // ИСПРАВЛЕНИЕ:
-                // Мы вернули индикатор в основной Box и УБРАЛИ padding.
-                // Теперь он будет сидеть наверху (скрытый) и появляться только при свайпе вниз.
-                PullToRefreshContainer(
-                    state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter)
-                )
+                PullToRefreshContainer(state = pullRefreshState, modifier = Modifier.align(Alignment.TopCenter))
             }
         }
     }
 }
+
+@Composable
+fun DrawerPentagonIcon(
+    icon: ImageVector,
+    color: Color,
+    iconTint: Color? = null,
+    onClick: () -> Unit
+) {
+    val isAddButton = iconTint != null
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(PentagonShape())
+            .background(if (isAddButton) color else Color(0xFFF4F4F6))
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint ?: color,
+            modifier = Modifier.size(24.dp)
+        )
+    }
+}
+
+fun Modifier.scale(scale: Float): Modifier = this.then(
+    Modifier.graphicsLayer(scaleX = scale, scaleY = scale)
+)

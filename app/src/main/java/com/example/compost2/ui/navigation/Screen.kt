@@ -10,6 +10,9 @@ sealed class Screen(val route: String) {
 
     object Settings : Screen("settings")
 
+    // НОВЫЙ ЭКРАН
+    object Integrations : Screen("integrations")
+
     object Player : Screen("player/{fileName}") {
         fun createRoute(fileName: String) = "player/$fileName"
     }
@@ -22,7 +25,6 @@ sealed class Screen(val route: String) {
         fun createRoute(fileName: String) = "publish/$fileName"
     }
 
-    // НОВЫЙ МАРШРУТ (принимает тип сервиса)
     object ApiKeySettings : Screen("api_key/{serviceType}") {
         fun createRoute(serviceType: String) = "api_key/$serviceType"
     }
