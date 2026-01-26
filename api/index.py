@@ -3,9 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 import os
 import json
-import base64
 import re
-from fastapi.responses import Response, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import boto3
 import uuid
@@ -29,17 +28,21 @@ s3_client = boto3.client(
 )
 BUCKET_NAME = os.environ.get('AWS_BUCKET_NAME')
 
-# --- МОДЕЛИ ДАННЫХ ---
-class AudioRequest(BaseModel):
+# --- МОДЕЛИ ДАННЫХ (Request Models) ---
+
+class TranscribeRequest(BaseModel):
+    file_key: str
+    openai_key: str
+
+class ProcessTextRequest(BaseModel):
+    raw_text: str
     prompt: str
     openai_key: str
-    # Теперь эти поля опциональны: можно прислать ИЛИ ключ, ИЛИ base64
-    file_key: str | None = None
-    audio_base64: str | None = None
 
 # --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
 def clean_json_string(text):
     text = text.strip()
+    # Пытаемся вытащить JSON из markdown блоков ```json ... ```
     pattern = r"^```(?:json)?\s*(\{.*?\})\s*```$"
     match = re.search(pattern, text, re.DOTALL)
     if match:
@@ -50,7 +53,7 @@ def clean_json_string(text):
 async def ping():
     return {"message": "pong", "status": "ok"}
 
-# --- ШАГ 1: ПОЛУЧЕНИЕ ССЫЛКИ НА ЗАГРУЗКУ ---
+# --- ЭНДПОИНТ 1: ПОЛУЧЕНИЕ ССЫЛКИ (БЕЗ ИЗМЕНЕНИЙ) ---
 @app.get("/api/get_upload_url")
 async def get_upload_url():
     try:
@@ -74,38 +77,27 @@ async def get_upload_url():
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
-# --- ШАГ 2: ОБРАБОТКА (ТЕПЕРЬ УМЕЕТ ЧИТАТЬ ИЗ S3) ---
-@app.post("/api/process-audio")
-async def process_audio(request: AudioRequest):
+
+# --- ЭНДПОИНТ 2: ТРАНСКРИБАЦИЯ (STAGE 1) ---
+@app.post("/api/transcribe")
+async def transcribe_audio(request: TranscribeRequest):
     temp_file_path = None
     try:
-        print("1. Request received")
+        print(f"1. Transcribe request for: {request.file_key}")
+        
         if not request.openai_key:
             return JSONResponse(content={"error": "OpenAI Key missing"}, status_code=400)
             
         client = OpenAI(api_key=request.openai_key)
         
-        # Создаем временный файл
+        # Скачиваем файл из S3 во временную папку
         temp_filename = f"audio_{os.urandom(4).hex()}.m4a"
         temp_file_path = os.path.join("/tmp", temp_filename)
 
-        # ЛОГИКА ВЫБОРА ИСТОЧНИКА
-        if request.file_key:
-            # ВАРИАНТ А: Файл в S3 (Новый способ)
-            print(f"2. Downloading from S3: {request.file_key}")
-            s3_client.download_file(BUCKET_NAME, request.file_key, temp_file_path)
-            
-        elif request.audio_base64:
-            # ВАРИАНТ Б: Base64 (Старый способ - для совместимости)
-            print("2. Decoding Base64...")
-            clean_base64 = request.audio_base64.replace("\n", "").replace("\r", "")
-            audio_data = base64.b64decode(clean_base64)
-            with open(temp_file_path, "wb") as f:
-                f.write(audio_data)
-        else:
-            return JSONResponse(content={"error": "No file_key or audio_base64 provided"}, status_code=400)
+        print(f"2. Downloading from S3 to {temp_file_path}")
+        s3_client.download_file(BUCKET_NAME, request.file_key, temp_file_path)
 
-        # ДАЛЬШЕ ВСЁ КАК ОБЫЧНО (Whisper -> GPT)
+        # Отправляем в Whisper
         print("3. Sending to Whisper...")
         with open(temp_file_path, "rb") as audio_file:
             transcription = client.audio.transcriptions.create(
@@ -114,28 +106,51 @@ async def process_audio(request: AudioRequest):
             )
         
         raw_text = transcription.text
-        print(f"   Whisper result: {raw_text[:50]}...")
-
-        print("4. Sending to GPT...")
-        completion = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": f"You are a professional editor. {request.prompt}. Return the result strictly as a valid JSON object with two keys: 'title' (string) and 'content' (string containing HTML). Do not add any markdown formatting."},
-                {"role": "user", "content": f"Here is the raw transcript: {raw_text}"}
-            ],
-            response_format={"type": "json_object"}
-        )
-
-        clean_response = clean_json_string(completion.choices[0].message.content)
-        return Response(content=clean_response, media_type="application/json")
+        print(f"4. Success. Text length: {len(raw_text)}")
+        
+        return JSONResponse(content={"raw_text": raw_text})
 
     except Exception as e:
         print(f"Error: {str(e)}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
         
     finally:
+        # Всегда удаляем временный файл
         if temp_file_path and os.path.exists(temp_file_path):
             try:
                 os.remove(temp_file_path)
             except:
                 pass
+
+
+# --- ЭНДПОИНТ 3: ПРОЦЕССИНГ ТЕКСТА (STAGE 2) ---
+@app.post("/api/process-text")
+async def process_text(request: ProcessTextRequest):
+    try:
+        print("1. Process text request received")
+        
+        if not request.openai_key:
+            return JSONResponse(content={"error": "OpenAI Key missing"}, status_code=400)
+
+        client = OpenAI(api_key=request.openai_key)
+
+        print("2. Sending to GPT-4o-mini...")
+        completion = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": f"You are a professional editor. {request.prompt}. Return the result strictly as a valid JSON object with two keys: 'title' (string) and 'content' (string containing HTML). Do not add any markdown formatting."},
+                {"role": "user", "content": f"Here is the text to process: {request.raw_text}"}
+            ],
+            response_format={"type": "json_object"}
+        )
+
+        raw_response = completion.choices[0].message.content
+        clean_response = clean_json_string(raw_response)
+
+        print("3. Success!")
+        # Возвращаем JSON напрямую, так как GPT уже вернул структуру
+        return JSONResponse(content=json.loads(clean_response))
+
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
