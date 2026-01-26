@@ -1,5 +1,9 @@
 package com.example.compost2.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -30,11 +34,11 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalDensity // ВАЖНЫЙ ИМПОРТ
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.dp // ВАЖНЫЙ ИМПОРТ
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -43,7 +47,7 @@ import com.example.compost2.ui.components.ActionLensButton
 import com.example.compost2.ui.components.AppTextEditor
 import com.example.compost2.ui.components.PlayerWidget
 import com.example.compost2.ui.theme.*
-import kotlin.math.abs
+import kotlin.math.abs // ВАЖНЫЙ ИМПОРТ
 
 const val LOREM_IPSUM = """
 Lorem ipsum dolor sit amet...
@@ -80,8 +84,15 @@ fun DetailScreen(
             }
             Spacer(modifier = Modifier.width(8.dp))
 
+            // ИСПРАВЛЕНИЕ ЛОГИКИ ЗАГОЛОВКА
+            val displayTitle = when {
+                viewModel.title.isNotBlank() -> viewModel.title
+                viewModel.rawText.isNotBlank() -> viewModel.rawText.take(150).replace("\n", " ") + "..."
+                else -> "New Project"
+            }
+
             Text(
-                text = viewModel.title.ifBlank { "New Project" },
+                text = displayTitle,
                 style = MaterialTheme.typography.titleMedium,
                 color = Color.Black,
                 maxLines = 1,
@@ -367,7 +378,6 @@ fun IntegrationsWidget(integrations: List<com.example.compost2.domain.Integratio
             } else {
                 counts.forEach { (type, count) ->
                     Box(modifier = Modifier.padding(end = 8.dp)) {
-                        // ИСПРАВЛЕНО: Добавлена функция, которой не хватало
                         AppliedIntegrationBadge(
                             icon = getIconForType(type),
                             color = Color.Black
@@ -395,7 +405,6 @@ fun IntegrationsWidget(integrations: List<com.example.compost2.domain.Integratio
     }
 }
 
-// ИСПРАВЛЕНО: Восстановлена функция для отрисовки значка интеграции
 @Composable
 fun AppliedIntegrationBadge(icon: ImageVector, color: Color) {
     Box(
