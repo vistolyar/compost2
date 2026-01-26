@@ -35,6 +35,7 @@ import com.example.compost2.domain.RecordingStatus
 import com.example.compost2.ui.components.HeroPentagonButton
 import com.example.compost2.ui.components.PentagonShape
 import com.example.compost2.ui.components.RecordingCard
+import com.example.compost2.ui.theme.*
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import kotlinx.coroutines.delay
@@ -50,7 +51,7 @@ fun HomeScreen(
     onNavigateToPublish: (String) -> Unit,
     onNavigateToPrompts: () -> Unit,
     onNavigateToApiKey: (String) -> Unit,
-    onNavigateToSettings: () -> Unit // В AppNavigation это теперь ведет на Integrations
+    onNavigateToSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -92,9 +93,13 @@ fun HomeScreen(
             },
             dismissButton = {
                 TextButton(onClick = { viewModel.cancelDelete() }) { Text("Cancel", style = MaterialTheme.typography.labelLarge) }
-            }
+            },
+            containerColor = AppWhite
         )
     }
+
+    // Фон дашборда
+    val backgroundColor = AppScreenBg
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -103,40 +108,22 @@ fun HomeScreen(
                 drawerContainerColor = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.width(300.dp)
             ) {
-                // --- 1. ПРОФИЛЬ (Header) ---
-                Column(modifier = Modifier.padding(start = 30.dp, end = 30.dp, top = 60.dp, bottom = 30.dp)) {
-                    if (googleAccount == null) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(50.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFFE0E0E5)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Person, null, tint = Color.Gray)
-                            }
-                            Spacer(modifier = Modifier.width(15.dp))
-                            Text(
-                                text = "Sign In",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.clickable {
-                                    scope.launch { drawerState.close() }
-                                    // Пока "Settings" здесь ведет на старые настройки Google (логин)
-                                    // В будущем можно разделить логин и интеграции
-                                    onNavigateToSettings()
-                                }
-                            )
-                        }
-                    } else {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (googleAccount?.photoUrl != null) {
-                                AsyncImage(
-                                    model = googleAccount!!.photoUrl,
-                                    contentDescription = "Avatar",
-                                    modifier = Modifier.size(50.dp).clip(CircleShape)
-                                )
-                            } else {
+                // --- HEADER С КНОПКОЙ ЗАКРЫТИЯ ---
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    // Кнопка закрытия (Крестик)
+                    IconButton(
+                        onClick = { scope.launch { drawerState.close() } },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Close Menu", tint = Color.Gray)
+                    }
+
+                    // Профиль
+                    Column(modifier = Modifier.padding(start = 30.dp, end = 30.dp, top = 60.dp, bottom = 30.dp)) {
+                        if (googleAccount == null) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
                                         .size(50.dp)
@@ -144,26 +131,55 @@ fun HomeScreen(
                                         .background(Color(0xFFE0E0E5)),
                                     contentAlignment = Alignment.Center
                                 ) {
+                                    Icon(Icons.Default.Person, null, tint = Color.Gray)
+                                }
+                                Spacer(modifier = Modifier.width(15.dp))
+                                Text(
+                                    text = "Sign In",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.clickable {
+                                        scope.launch { drawerState.close() }
+                                        onNavigateToSettings()
+                                    }
+                                )
+                            }
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (googleAccount?.photoUrl != null) {
+                                    AsyncImage(
+                                        model = googleAccount!!.photoUrl,
+                                        contentDescription = "Avatar",
+                                        modifier = Modifier.size(50.dp).clip(CircleShape)
+                                    )
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(50.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFE0E0E5)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = googleAccount?.displayName?.take(1) ?: "U",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = Color.DarkGray
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(15.dp))
+                                Column {
                                     Text(
-                                        text = googleAccount?.displayName?.take(1) ?: "U",
+                                        text = googleAccount?.displayName ?: "User",
                                         style = MaterialTheme.typography.titleMedium,
-                                        color = Color.DarkGray
+                                        color = Color.Black
+                                    )
+                                    Text(
+                                        text = googleAccount?.email ?: "",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color.Gray,
+                                        fontWeight = FontWeight.Medium
                                     )
                                 }
-                            }
-                            Spacer(modifier = Modifier.width(15.dp))
-                            Column {
-                                Text(
-                                    text = googleAccount?.displayName ?: "User",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = Color.Black
-                                )
-                                Text(
-                                    text = googleAccount?.email ?: "",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color.Gray,
-                                    fontWeight = FontWeight.Medium
-                                )
                             }
                         }
                     }
@@ -171,7 +187,7 @@ fun HomeScreen(
 
                 Divider(color = Color(0xFFF0F0F2), thickness = 1.dp)
 
-                // --- 2. ОСНОВНЫЕ ПУНКТЫ ---
+                // Menu Items
                 Column(modifier = Modifier.padding(horizontal = 15.dp)) {
                     NavigationDrawerItem(
                         label = { Text("Prompts", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold) },
@@ -203,7 +219,7 @@ fun HomeScreen(
                     )
                 }
 
-                // --- 3. ИНТЕГРАЦИИ (Row of Pentagons) ---
+                // Integrations
                 Column(modifier = Modifier.padding(start = 30.dp, end = 30.dp, top = 25.dp)) {
                     Text(
                         text = "INTEGRATIONS",
@@ -239,7 +255,6 @@ fun HomeScreen(
                                 .clip(CircleShape)
                                 .clickable {
                                     scope.launch { drawerState.close() }
-                                    // Теперь эта кнопка ведет на экран Интеграций
                                     onNavigateToSettings()
                                 },
                             contentAlignment = Alignment.Center
@@ -256,7 +271,7 @@ fun HomeScreen(
 
                 Spacer(modifier = Modifier.height(25.dp))
 
-                // --- 4. API SETTINGS ---
+                // API Settings
                 Column(modifier = Modifier.padding(horizontal = 15.dp)) {
                     Text(
                         text = "API SETTINGS",
@@ -301,7 +316,8 @@ fun HomeScreen(
                     modifier = Modifier.padding(bottom = 20.dp)
                 )
             },
-            floatingActionButtonPosition = FabPosition.Center
+            floatingActionButtonPosition = FabPosition.Center,
+            containerColor = backgroundColor
         ) { paddingValues ->
             Box(
                 modifier = Modifier

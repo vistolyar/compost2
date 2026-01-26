@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -26,8 +27,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.example.compost2.domain.RecordingStatus
-import com.example.compost2.ui.theme.* // Импортируем новую палитру
+import com.example.compost2.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +48,16 @@ fun PlayerWidget(
 ) {
     var isExpanded by remember { mutableStateOf(false) }
 
+    // Логика сворачивания при клике на фон (если развернут)
+    fun onBackgroundClick() {
+        if (isExpanded) {
+            isExpanded = false
+            if (isPlaying) onTogglePlay() // Пауза при сворачивании
+        } else {
+            isExpanded = true
+        }
+    }
+
     val endPadding by animateDpAsState(
         targetValue = if (isExpanded) 0.dp else 60.dp,
         animationSpec = tween(500),
@@ -61,7 +73,6 @@ fun PlayerWidget(
         }
     }
 
-    // ИСПОЛЬЗУЕМ НОВЫЕ ЦВЕТА
     val (statusColor, statusText, actionLabel) = when (status) {
         RecordingStatus.TRANSCRIBED, RecordingStatus.PUBLISHED, RecordingStatus.READY ->
             Triple(AppSuccess, "TRANSCRIBED", "Show")
@@ -76,7 +87,7 @@ fun PlayerWidget(
             .fillMaxWidth()
             .height(180.dp)
             .clip(RoundedCornerShape(32.dp))
-            .background(AppPrimary) // Был ActionPurple
+            .background(AppPrimary)
     ) {
         // КНОПКА SEND
         Column(
@@ -100,7 +111,7 @@ fun PlayerWidget(
                         lineTo(w * 0.05f, h * 0.38f)
                         close()
                     }
-                    drawPath(path = path, color = AppWhite, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)) // Был TextWhite
+                    drawPath(path = path, color = AppWhite, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
                     val arrowPath = Path().apply {
                         moveTo(w * 0.35f, h * 0.58f)
                         lineTo(w * 0.50f, h * 0.43f)
@@ -108,14 +119,14 @@ fun PlayerWidget(
                         moveTo(w * 0.50f, h * 0.43f)
                         lineTo(w * 0.50f, h * 0.75f)
                     }
-                    drawPath(path = arrowPath, color = AppWhite, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)) // Был TextWhite
+                    drawPath(path = arrowPath, color = AppWhite, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
                 }
             }
             Spacer(modifier = Modifier.height(4.dp))
-            Text("SEND", color = AppWhite, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp) // Был TextWhite
+            Text("SEND", color = AppWhite, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
         }
 
-        // ШТОРКА (MAIN INFO)
+        // ШТОРКА
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -125,11 +136,11 @@ fun PlayerWidget(
                     topEnd = if (isExpanded) 32.dp else 0.dp,
                     bottomEnd = if (isExpanded) 32.dp else 0.dp
                 ))
-                .background(Color(0xFFE2E2E7)) // Цвет шторки можно вынести в AppColors, но пока оставим как в дизайне
+                .background(Color(0xFFE2E2E7))
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null
-                ) { isExpanded = !isExpanded }
+                ) { onBackgroundClick() }
                 .padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 15.dp)
         ) {
 
@@ -137,7 +148,7 @@ fun PlayerWidget(
                 modifier = Modifier.align(Alignment.CenterStart).fillMaxWidth(),
                 verticalArrangement = Arrangement.Center
             ) {
-                // ВЕРХНЯЯ ЧАСТЬ
+                // ВЕРХНЯЯ ЧАСТЬ (Заголовок)
                 if (isExpanded) {
                     Text(
                         text = fileName,
@@ -181,6 +192,7 @@ fun PlayerWidget(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
                     ) {
+                        // Play button triggers playback
                         PlayButton(isPlaying, onTogglePlay)
                         Spacer(modifier = Modifier.width(12.dp))
                         Slider(
@@ -205,34 +217,53 @@ fun PlayerWidget(
 
                     Spacer(modifier = Modifier.weight(1f))
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    // НИЖНЯЯ ЧАСТЬ (Статус и Дата)
+                    // Используем Box для наложения, чтобы дата была приоритетнее
+                    Box(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        contentAlignment = Alignment.BottomStart
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        // СТАТУС (Слева)
+                        Column(
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier.align(Alignment.BottomStart)
+                        ) {
                             StatusIndicator(statusColor, statusText)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = actionLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 10.sp,
-                                color = AppPrimary, // Был ActionPurple
-                                textDecoration = TextDecoration.Underline,
-                                modifier = Modifier.clickable { onStatusActionClick() }
-                            )
+
+                            // Кнопка Show под статусом
+                            if (status == RecordingStatus.TRANSCRIBED || status == RecordingStatus.PUBLISHED || status == RecordingStatus.READY) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = actionLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontSize = 10.sp,
+                                    color = AppPrimary,
+                                    textDecoration = TextDecoration.Underline,
+                                    modifier = Modifier.clickable { onStatusActionClick() }
+                                )
+                            }
                         }
 
-                        Text(
-                            text = dateText,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontSize = 10.sp,
-                            color = Color.Black.copy(alpha = 0.3f),
-                            fontWeight = FontWeight.Bold
-                        )
+                        // ДАТА (Справа, с подложкой)
+                        // Блюр и фон, чтобы текст под ней (если длинный) не мешал
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .background(Color(0xFFE2E2E7).copy(alpha = 0.9f)) // Подложка в цвет фона шторки
+                                .padding(start = 8.dp)
+                        ) {
+                            Text(
+                                text = dateText,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp,
+                                color = Color.Black.copy(alpha = 0.3f),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
 
                 } else {
+                    // Свернутый вид
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()

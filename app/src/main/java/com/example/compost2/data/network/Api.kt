@@ -1,36 +1,41 @@
 package com.example.compost2.data.network
 
 import okhttp3.RequestBody
+import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
-import retrofit2.http.Header
-import retrofit2.http.POST
 import retrofit2.http.PUT
+import retrofit2.http.POST
 import retrofit2.http.Url
 
 interface CompostApi {
 
     @GET("api/ping")
-    suspend fun ping(): Any
+    suspend fun ping(): Map<String, String>
 
-    // --- ШАГ 1: Получить ссылку для загрузки ---
+    // 1. Получить ссылку на S3
     @GET("api/get_upload_url")
     suspend fun getUploadUrl(): UploadUrlResponse
 
-    // --- ШАГ 2: Загрузить файл в S3 ---
-    // @Url позволяет использовать динамическую ссылку, полученную на шаге 1
-    // Мы не используем @Body ArticleRequest, мы шлем сырые байты (RequestBody)
+    // 2. Загрузить файл в S3 (прямой URL)
     @PUT
     suspend fun uploadFileToS3(
         @Url url: String,
-        @Body file: RequestBody,
-        @Header("Content-Type") contentType: String = "audio/mp4"
-    ): Response<Unit>
+        @Body file: RequestBody
+    ): Response<ResponseBody>
 
-    // --- ШАГ 3: Сказать бэкенду "Готово, обрабатывай" ---
-    @POST("api/process-audio")
-    suspend fun processAudio(
-        @Body request: ArticleRequest
+    // --- NEW V2.0 API ---
+
+    // 3. Шаг 1: Транскрибация (File Key -> Raw Text)
+    @POST("api/transcribe")
+    suspend fun transcribe(
+        @Body request: TranscribeRequest
+    ): TranscribeResponse
+
+    // 4. Шаг 2: Процессинг (Raw Text + Prompt -> Title/Content)
+    @POST("api/process-text")
+    suspend fun processText(
+        @Body request: ProcessTextRequest
     ): ArticleResponse
 }

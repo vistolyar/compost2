@@ -21,11 +21,12 @@ import com.example.compost2.data.SettingsDataStore
 import com.example.compost2.data.auth.GoogleAuthClient
 import com.example.compost2.data.auth.GoogleServicesHelper
 import com.example.compost2.data.network.AiActionResponse
-import com.example.compost2.data.network.ArticleRequest
 import com.example.compost2.data.network.ChatRequest
 import com.example.compost2.data.network.Message
 import com.example.compost2.data.network.OpenAiClient
+import com.example.compost2.data.network.ProcessTextRequest // НОВЫЙ ИМПОРТ
 import com.example.compost2.data.network.RetrofitClient
+import com.example.compost2.data.network.TranscribeRequest // НОВЫЙ ИМПОРТ
 import com.example.compost2.domain.IntegrationType
 import com.example.compost2.domain.PromptItem
 import com.example.compost2.domain.RecordingItem
@@ -61,7 +62,6 @@ class DetailViewModel(private val context: Context) : ViewModel() {
     var rawText by mutableStateOf("")
     var hasRawText by mutableStateOf(false)
 
-    // ИЗМЕНЕНО: Храним дату как число (timestamp), чтобы UI сам решал, как её рисовать
     var recordingDateTimestamp by mutableLongStateOf(0L)
 
     // --- СОСТОЯНИЕ UI ---
@@ -83,7 +83,6 @@ class DetailViewModel(private val context: Context) : ViewModel() {
         prompts = promptsRepository.getPrompts()
         val file = File(context.cacheDir, id)
 
-        // Парсим таймстемп из имени файла
         recordingDateTimestamp = parseTimestampFromFilename(id)
 
         if (file.exists()) {
@@ -106,7 +105,6 @@ class DetailViewModel(private val context: Context) : ViewModel() {
         }
     }
 
-    // Возвращает Long (миллисекунды)
     private fun parseTimestampFromFilename(fileName: String): Long {
         return try {
             val datePart = fileName.split("_")[0]
@@ -196,10 +194,19 @@ class DetailViewModel(private val context: Context) : ViewModel() {
 
     fun onPromptSelected(prompt: PromptItem) {
         showLens = false
-        processTextWithAi(prompt)
+        // Если у нас уже есть rawText, используем его как источник правды
+        // Если нет (старая запись), используем content
+        val sourceText = if (hasRawText) rawText else content
+
+        // Тут мы могли бы использовать новый эндпоинт processText,
+        // но пока оставим старую логику прямых запросов к OpenAI для "линзы" внутри DetailScreen,
+        // или переведем на processText (лучше перевести).
+
+        // ДАВАЙТЕ ПЕРЕВЕДЕМ НА НОВЫЙ API, так как это дешевле и быстрее
+        processTextWithBackend(sourceText, prompt)
     }
 
-    private fun processTextWithAi(prompt: PromptItem) {
+    private fun processTextWithBackend(text: String, prompt: PromptItem) {
         isBusy = true
         viewModelScope.launch {
             try {
@@ -210,61 +217,31 @@ class DetailViewModel(private val context: Context) : ViewModel() {
                     return@launch
                 }
 
-                val sourceText = if (hasRawText) rawText else content
-
-                val systemInstruction = """
-                    You are an Action Extractor API. 
-                    Output valid JSON only. No markdown.
-                    Format: { "action_type": "...", "title": "...", "body": "...", "date": "..." }
-                    User Request: ${prompt.content}
-                """.trimIndent()
-
-                val request = ChatRequest(
-                    messages = listOf(
-                        Message("system", systemInstruction),
-                        Message("user", sourceText)
-                    )
+                val request = ProcessTextRequest(
+                    rawText = text,
+                    prompt = prompt.content, // Здесь текст промпта
+                    openAiKey = apiKey
                 )
 
-                val response = OpenAiClient.api.generateResponse("Bearer $apiKey", request)
-                val jsonContent = response.choices.firstOrNull()?.message?.content
+                val response = RetrofitClient.api.processText(request)
 
-                if (jsonContent != null) {
-                    val actionData = gson.fromJson(jsonContent, AiActionResponse::class.java)
-                    handleAiAction(actionData)
-                }
+                // Обновляем UI
+                title = response.title
+                content = response.content
+                updateContent(title, content)
+
+                Toast.makeText(context, "Processed!", Toast.LENGTH_SHORT).show()
 
             } catch (e: Exception) {
                 e.printStackTrace()
-                Toast.makeText(context, "AI Error: ${e.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 isBusy = false
             }
         }
     }
 
-    private fun handleAiAction(data: AiActionResponse) {
-        when (data.actionType) {
-            "CALENDAR" -> {
-                title = data.title ?: title
-                content = "${data.body}\n\n[Date: ${data.date}]"
-                triggerIntegration(IntegrationType.CALENDAR)
-            }
-            "GMAIL" -> {
-                title = data.title ?: title
-                content = data.body ?: content
-                triggerIntegration(IntegrationType.GMAIL)
-            }
-            else -> {
-                title = data.title ?: title
-                content = data.body ?: content
-                Toast.makeText(context, "Text processed", Toast.LENGTH_SHORT).show()
-            }
-        }
-        updateContent(title, content)
-    }
-
-    // --- RE-TRANSCRIBE ---
+    // --- RE-TRANSCRIBE (NEW API 2.0) ---
     fun reTranscribe() {
         if (isBusy || item == null) return
         isBusy = true
@@ -277,24 +254,32 @@ class DetailViewModel(private val context: Context) : ViewModel() {
                 val file = File(item!!.filePath)
                 if (!file.exists()) return@launch
 
+                // 1. UPLOAD
                 val uploadInfo = RetrofitClient.api.getUploadUrl()
                 val requestBody = RequestBody.create("audio/mp4".toMediaTypeOrNull(), file)
                 val uploadResponse = RetrofitClient.api.uploadFileToS3(uploadInfo.uploadUrl, requestBody)
 
                 if (!uploadResponse.isSuccessful) throw Exception("S3 Upload Error")
 
-                val request = ArticleRequest(
+                // 2. TRANSCRIBE
+                val transcribeRequest = TranscribeRequest(
                     fileKey = uploadInfo.fileKey,
-                    audioBase64 = null,
-                    prompt = "Transcribe exactly what is said. No formatting.",
-                    openaiKey = apiKey
+                    openAiKey = apiKey
                 )
+                val transcribeResponse = RetrofitClient.api.transcribe(transcribeRequest)
+                val newRawText = transcribeResponse.rawText
 
-                val response = RetrofitClient.api.processAudio(request)
+                // 3. PROCESS (Default Prompt)
+                val processRequest = ProcessTextRequest(
+                    rawText = newRawText,
+                    prompt = "Transcribe exactly what is said. No formatting.",
+                    openAiKey = apiKey
+                )
+                val processResponse = RetrofitClient.api.processText(processRequest)
 
-                title = response.title
-                content = response.content
-                rawText = response.content
+                title = processResponse.title
+                content = processResponse.content
+                rawText = newRawText
 
                 item?.let { current ->
                     val updated = current.copy(
@@ -344,6 +329,8 @@ class DetailViewModel(private val context: Context) : ViewModel() {
     }
 
     fun triggerIntegration(type: IntegrationType) {
+        // ... (старая логика для Google Calendar/Gmail)
+        // Она может остаться как есть или тоже быть перенесена на бэкенд в будущем
         val googleAccount = authClient.getSignedInAccount()
         if (googleAccount == null && (type == IntegrationType.CALENDAR || type == IntegrationType.GMAIL || type == IntegrationType.TASKS)) {
             Toast.makeText(context, "Sign in to Google first", Toast.LENGTH_SHORT).show()

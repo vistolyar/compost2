@@ -11,8 +11,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.compost2.data.PromptsRepository
 import com.example.compost2.data.SettingsDataStore
-import com.example.compost2.data.network.ArticleRequest
+import com.example.compost2.data.network.ProcessTextRequest
 import com.example.compost2.data.network.RetrofitClient
+import com.example.compost2.data.network.TranscribeRequest
 import com.example.compost2.domain.RecordingItem
 import com.example.compost2.domain.RecordingStatus
 import com.google.gson.Gson
@@ -81,53 +82,72 @@ class HomeViewModel(private val context: Context) : ViewModel() {
 
         recordings = list
 
-        // Запуск обработки для всех, кто в статусе PROCESSING
+        // Запуск обработки только для тех, кто в статусе PROCESSING
+        // Если статус SAVED (Recorded), мы ничего не делаем, ждем действий пользователя
         list.filter { it.status == RecordingStatus.PROCESSING }.forEach { item ->
             startProcessingInBackground(item)
         }
     }
 
+    // --- ГЛАВНАЯ ЛОГИКА V2.0 ---
     private fun startProcessingInBackground(item: RecordingItem) {
         if (activeJobs.containsKey(item.id)) return
 
         val job = viewModelScope.launch(Dispatchers.IO) {
             try {
                 val savedKey = dataStore.openAiKey.first() ?: return@launch
-                val promptText = promptsRepository.getPrompts().find { it.title == item.promptName }?.content ?: "Transcribe exactly what is said."
+
+                // Получаем текст промпта
+                val promptText = promptsRepository.getPrompts().find { it.title == item.promptName }?.content
+                    ?: "Transcribe exactly what is said."
 
                 val file = File(item.filePath)
                 if (!file.exists()) return@launch
 
-                // --- НОВАЯ ЛОГИКА S3 UPLOAD ---
-
-                // 1. Получаем ссылку
+                // --- ШАГ 1: ЗАГРУЗКА (Upload Phase) ---
                 val uploadInfo = RetrofitClient.api.getUploadUrl()
-
-                // 2. Грузим файл
                 val requestBody = RequestBody.create("audio/mp4".toMediaTypeOrNull(), file)
                 val uploadResponse = RetrofitClient.api.uploadFileToS3(uploadInfo.uploadUrl, requestBody)
 
                 if (!uploadResponse.isSuccessful) {
-                    throw Exception("Upload failed: ${uploadResponse.code()}")
+                    throw Exception("S3 Upload failed: ${uploadResponse.code()}")
                 }
 
-                // 3. Отправляем на процессинг (используем processAudio вместо uploadAudio)
-                val request = ArticleRequest(
+                // --- ШАГ 2: ТРАНСКРИБАЦИЯ (Transcription Phase) ---
+                val transcribeRequest = TranscribeRequest(
                     fileKey = uploadInfo.fileKey,
-                    audioBase64 = null,
-                    prompt = promptText,
-                    openaiKey = savedKey
+                    openAiKey = savedKey
                 )
 
-                val response = RetrofitClient.api.processAudio(request)
+                val transcribeResponse = RetrofitClient.api.transcribe(transcribeRequest)
+                val rawText = transcribeResponse.rawText
+
+                // Сохраняем Raw Text локально (Промежуточное сохранение)
+                val itemWithRaw = item.copy(rawTranscription = rawText)
+                saveMetadataToDisk(itemWithRaw)
+
+                // Обновляем UI (можно было бы показать статус "Analyzing...")
+                withContext(Dispatchers.Main) {
+                    updateItemInList(itemWithRaw)
+                }
+
+                // --- ШАГ 3: ПРОЦЕССИНГ (Action Phase) ---
+                val processRequest = ProcessTextRequest(
+                    rawText = rawText,
+                    prompt = promptText,
+                    openAiKey = savedKey
+                )
+
+                val processResponse = RetrofitClient.api.processText(processRequest)
 
                 withContext(Dispatchers.Main) {
-                    onAiResultReceived(item, response.title, response.content)
+                    onAiResultReceived(itemWithRaw, processResponse.title, processResponse.content)
                 }
+
             } catch (e: Exception) {
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
-                    // Если ошибка, возвращаем статус SAVED, чтобы можно было повторить
+                    // Если ошибка, возвращаем статус SAVED (Recorded), чтобы можно было повторить
                     updateItemStatus(item, RecordingStatus.SAVED)
                 }
             } finally {
@@ -153,7 +173,6 @@ class HomeViewModel(private val context: Context) : ViewModel() {
     }
 
     fun onAiResultReceived(item: RecordingItem, title: String, content: String) {
-        // Меняем статус на TRANSCRIBED согласно новой логике
         val newItem = item.copy(
             status = RecordingStatus.TRANSCRIBED,
             articleTitle = title,

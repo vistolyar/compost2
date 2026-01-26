@@ -13,11 +13,14 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.compost2.data.PromptsRepository
 import com.example.compost2.data.SettingsDataStore
-import com.example.compost2.data.network.ArticleRequest
+// ИСПРАВЛЕНО: Новые импорты для API 2.0
+import com.example.compost2.data.network.ProcessTextRequest
 import com.example.compost2.data.network.RetrofitClient
+import com.example.compost2.data.network.TranscribeRequest
 import com.example.compost2.domain.PromptItem
 import com.example.compost2.domain.RecordingItem
 import com.example.compost2.domain.RecordingStatus
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -25,6 +28,7 @@ import kotlinx.coroutines.launch
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody
 import java.io.File
+import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -34,6 +38,7 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
 
     private val dataStore = SettingsDataStore(context)
     private val promptsRepository = PromptsRepository(context)
+    private val gson = Gson()
 
     var recordingItem by mutableStateOf<RecordingItem?>(null)
         private set
@@ -70,13 +75,31 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
     fun loadRecording(fileName: String) {
         val file = File(context.cacheDir, fileName)
         if (file.exists()) {
-            recordingItem = RecordingItem(
-                id = file.name,
-                name = parseFileNameToDisplay(file.name),
-                status = RecordingStatus.SAVED,
-                filePath = file.absolutePath
-            )
+            // Пытаемся загрузить существующие метаданные, если есть
+            val metaFile = File(file.path + ".json")
+            if (metaFile.exists()) {
+                try {
+                    val reader = java.io.FileReader(metaFile)
+                    val loaded = gson.fromJson(reader, RecordingItem::class.java)
+                    reader.close()
+                    recordingItem = loaded.copy(filePath = file.absolutePath)
+                } catch (e: Exception) {
+                    // Fallback если JSON битый
+                    recordingItem = createDefaultItem(file)
+                }
+            } else {
+                recordingItem = createDefaultItem(file)
+            }
         }
+    }
+
+    private fun createDefaultItem(file: File): RecordingItem {
+        return RecordingItem(
+            id = file.name,
+            name = parseFileNameToDisplay(file.name),
+            status = RecordingStatus.SAVED,
+            filePath = file.absolutePath
+        )
     }
 
     fun selectPrompt(prompt: PromptItem) {
@@ -135,13 +158,12 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
                     return@launch
                 }
 
-                // --- НОВАЯ ЛОГИКА S3 ---
+                // --- НОВАЯ ЛОГИКА API 2.0 (Two-Stage Pipeline) ---
 
-                // 1. Получаем ссылку
+                // 1. ПОЛУЧЕНИЕ ССЫЛКИ И ЗАГРУЗКА В S3
                 uploadProgress = 0.2f
                 val uploadInfo = RetrofitClient.api.getUploadUrl()
 
-                // 2. Грузим файл в облако
                 uploadProgress = 0.4f
                 val requestBody = RequestBody.create("audio/mp4".toMediaTypeOrNull(), file)
                 val uploadResponse = RetrofitClient.api.uploadFileToS3(uploadInfo.uploadUrl, requestBody)
@@ -150,21 +172,41 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
                     throw Exception("S3 Upload failed: ${uploadResponse.code()}")
                 }
 
-                // 3. Отправляем на обработку
-                uploadProgress = 0.7f
-                val request = ArticleRequest(
-                    fileKey = uploadInfo.fileKey, // Используем ключ
-                    audioBase64 = null,           // Base64 не нужен
-                    prompt = currentPrompt.content,
-                    openaiKey = savedKey
+                // 2. ТРАНСКРИБАЦИЯ (Получаем Raw Text)
+                uploadProgress = 0.6f
+                val transcribeRequest = TranscribeRequest(
+                    fileKey = uploadInfo.fileKey,
+                    openAiKey = savedKey
                 )
+                val transcribeResponse = RetrofitClient.api.transcribe(transcribeRequest)
+                val rawText = transcribeResponse.rawText
 
-                val response = RetrofitClient.api.processAudio(request)
+                // 3. ПРОЦЕССИНГ (Применяем промпт к тексту)
+                uploadProgress = 0.8f
+                val processRequest = ProcessTextRequest(
+                    rawText = rawText,
+                    prompt = currentPrompt.content,
+                    openAiKey = savedKey
+                )
+                val processResponse = RetrofitClient.api.processText(processRequest)
 
                 uploadProgress = 1.0f
 
-                resultTitle = response.title
-                resultBody = response.content
+                resultTitle = processResponse.title
+                resultBody = processResponse.content
+
+                // 4. СОХРАНЯЕМ РЕЗУЛЬТАТ В ФАЙЛ (Metadata)
+                // Чтобы при возврате на главный экран мы видели изменения
+                val updatedItem = item.copy(
+                    status = RecordingStatus.TRANSCRIBED,
+                    articleTitle = resultTitle,
+                    articleContent = resultBody,
+                    rawTranscription = rawText,
+                    promptName = currentPrompt.title
+                )
+
+                saveMetadata(updatedItem)
+                recordingItem = updatedItem // Обновляем состояние UI
 
                 isFinished = true
 
@@ -175,6 +217,13 @@ class SendToSTTViewModel(private val context: Context) : ViewModel() {
                 uploadProgress = 0f
             }
         }
+    }
+
+    private fun saveMetadata(item: RecordingItem) {
+        try {
+            val metaFile = File(item.filePath + ".json")
+            FileWriter(metaFile).use { gson.toJson(item, it) }
+        } catch (e: Exception) { e.printStackTrace() }
     }
 
     fun cancelProcessing() {

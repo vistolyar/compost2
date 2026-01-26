@@ -40,8 +40,9 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.compost2.domain.RecordingStatus
 import com.example.compost2.ui.components.ActionLensButton
+import com.example.compost2.ui.components.AppTextEditor
 import com.example.compost2.ui.components.PlayerWidget
-import com.example.compost2.ui.theme.* // Импортируем все цвета (AppPrimary и др.)
+import com.example.compost2.ui.theme.*
 import kotlin.math.abs
 
 const val LOREM_IPSUM = """
@@ -93,7 +94,6 @@ fun DetailScreen(
 
             if (viewModel.hasRawText) {
                 IconButton(onClick = { viewModel.restoreRawText() }) {
-                    // ИСПРАВЛЕНО: ActionPurple -> AppPrimary
                     Icon(Icons.Default.History, contentDescription = "Restore", tint = AppPrimary)
                 }
             }
@@ -133,93 +133,48 @@ fun DetailScreen(
                 }
             }
 
-            // --- СЕКЦИЯ ИНТЕГРАЦИЙ ---
+            // --- СЕКЦИЯ ИНТЕГРАЦИЙ (LINKED) ---
             item {
                 val hasEditableText = viewModel.content.isNotBlank()
                 if (hasEditableText) {
                     Box(
-                        modifier = Modifier
-                            .padding(horizontal = 25.dp, vertical = 4.dp)
-                            .enableSwipeNavigation(
-                                onSwipeRight = onNavigateBack,
-                                onSwipeLeft = { viewModel.onOpenLens() }
-                            )
+                        modifier = Modifier.padding(horizontal = 25.dp, vertical = 4.dp)
                     ) {
-                        IntegrationsWidget(showTextIcon = true)
+                        IntegrationsWidget(
+                            integrations = viewModel.item?.completedIntegrations ?: emptyList()
+                        )
                     }
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
 
-            // --- STICKY HEADER ---
-            stickyHeader {
-                Column(modifier = Modifier.fillMaxWidth().background(Color.White)) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 25.dp)
-                            .height(10.dp)
-                            .border(1.dp, Color(0xFFF0F0F2), RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                            .background(Color.White)
-                    )
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 25.dp)
-                            .border(width = 1.dp, color = Color(0xFFF0F0F2))
-                            .background(Color.White)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(start = 25.dp, top = 15.dp, bottom = 10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(20.dp)
-                        ) {
-                            Text("TEXT", style = MaterialTheme.typography.labelSmall, color = Color.Black)
-                            Text("HTML", style = MaterialTheme.typography.labelSmall, color = Color.Black.copy(alpha = 0.3f))
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Color(0xFFF8F8FA))
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.spacedBy(15.dp)
-                        ) {
-                            Icon(Icons.Default.FormatBold, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
-                            Icon(Icons.Default.FormatItalic, null, tint = Color.Gray, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.weight(1f))
-                            Icon(Icons.Default.ContentCopy, null, tint = Color.Gray, modifier = Modifier.size(18.dp).clickable { viewModel.copyToClipboard() })
-                        }
-                    }
-                }
-            }
-
-            // --- ТЕКСТ ---
+            // --- ТЕКСТ (Используем AppTextEditor) ---
             item {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 25.dp)
-                        .border(1.dp, Color(0xFFF0F0F2))
-                        .background(Color.White)
-                        .padding(20.dp)
                 ) {
                     if (viewModel.content.isNotBlank()) {
-                        BasicTextField(
+                        AppTextEditor(
                             value = viewModel.content,
                             onValueChange = { viewModel.updateContent(viewModel.title, it) },
-                            textStyle = TextStyle(
-                                fontFamily = MontserratFontFamily,
-                                fontWeight = FontWeight.Normal,
-                                fontSize = 16.sp,
-                                lineHeight = 26.sp,
-                                color = Color.Black
-                            ),
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 300.dp),
+                            placeholder = "Transcribed text will appear here...",
+                            showJsonTab = false,
+                            onCopy = { viewModel.copyToClipboard() }
                         )
                     } else {
-                        Text("Ready to transcribe...", color = Color.LightGray, fontFamily = MontserratFontFamily)
+                        // Empty state
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(200.dp)
+                                .border(1.dp, Color(0xFFF0F0F2), RoundedCornerShape(20.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Ready to transcribe...", color = Color.LightGray)
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(30.dp))
@@ -241,14 +196,8 @@ fun DetailScreen(
         // 3. RAW TEXT MODAL
         AnimatedVisibility(
             visible = viewModel.showRawTextModal,
-            enter = scaleIn(
-                animationSpec = tween(300),
-                transformOrigin = TransformOrigin(0.3f, 0.25f)
-            ) + fadeIn(tween(300)),
-            exit = scaleOut(
-                animationSpec = tween(250),
-                transformOrigin = TransformOrigin(0.3f, 0.25f)
-            ) + fadeOut(tween(250)),
+            enter = scaleIn(animationSpec = tween(300)) + fadeIn(),
+            exit = scaleOut(animationSpec = tween(250)) + fadeOut(),
             modifier = Modifier.zIndex(50f)
         ) {
             Box(
@@ -263,14 +212,12 @@ fun DetailScreen(
                         .padding(horizontal = 25.dp)
                         .fillMaxWidth()
                         .heightIn(max = 600.dp)
-                        .clickable(enabled = false) {}
-                        .enableSwipeToDismiss { viewModel.showRawTextModal = false },
+                        .clickable(enabled = false) {},
                     colors = CardDefaults.cardColors(containerColor = Color.White),
                     shape = RoundedCornerShape(24.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
                 ) {
                     Column(modifier = Modifier.padding(24.dp)) {
-                        // ЗАГОЛОВОК
                         Text(
                             text = "Raw Transcription",
                             style = MaterialTheme.typography.titleMedium,
@@ -295,33 +242,46 @@ fun DetailScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // ФУТЕР
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Кнопка пересоздания (Фиолетовая -> AppPrimary)
+                            // Кнопка Re-transcribe
                             Button(
                                 onClick = {
                                     viewModel.reTranscribe()
                                     viewModel.showRawTextModal = false
                                 },
-                                modifier = Modifier.weight(1f),
-                                // ИСПРАВЛЕНО: ActionPurple -> AppPrimary
-                                colors = ButtonDefaults.buttonColors(containerColor = AppPrimary)
+                                modifier = Modifier.weight(1f).height(56.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = AppPrimary),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.Refresh, null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Re-transcribe", fontSize = 11.sp)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp), tint = Color.White)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Re\nTranscribe",
+                                        color = Color.White,
+                                        fontSize = 12.sp,
+                                        lineHeight = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        textAlign = TextAlign.Start
+                                    )
+                                }
                             }
 
-                            // Кнопка закрытия
-                            Button(
+                            // Кнопка Cancel
+                            TextButton(
                                 onClick = { viewModel.showRawTextModal = false },
-                                modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333))
+                                modifier = Modifier.weight(1f).height(56.dp)
                             ) {
-                                Text("Close", fontSize = 11.sp)
+                                Text(
+                                    "Cancel",
+                                    color = Color.Gray,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
@@ -332,8 +292,8 @@ fun DetailScreen(
         // 4. ACTION LENS
         AnimatedVisibility(
             visible = viewModel.showLens,
-            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+            enter = slideInHorizontally { it } + fadeIn(),
+            exit = slideOutHorizontally { it } + fadeOut(),
             modifier = Modifier.align(Alignment.Center)
         ) {
             Box(
@@ -343,7 +303,8 @@ fun DetailScreen(
                     .clickable { viewModel.showLens = false },
                 contentAlignment = Alignment.Center
             ) {
-                Box(modifier = Modifier.size(360.dp)) {
+                // Линза
+                Box(modifier = Modifier.size(360.dp), contentAlignment = Alignment.Center) {
                     ActionLensButton(
                         state = com.example.compost2.ui.screens.ActionState.SELECTION,
                         prompts = viewModel.prompts,
@@ -352,21 +313,42 @@ fun DetailScreen(
                         onSelect = { prompt -> viewModel.onPromptSelected(prompt) }
                     )
                 }
+
+                // Подсказки
+                Column(
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "CHOOSE YOUR PROMPT",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        letterSpacing = 2.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "SWIPE RIGHT TO CANCEL",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 10.sp
+                    )
+                }
             }
         }
 
         if (viewModel.isBusy) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                // ИСПРАВЛЕНО: ActionPurple -> AppPrimary
                 CircularProgressIndicator(color = AppPrimary)
             }
         }
     }
 }
 
-// ВИДЖЕТ ИНТЕГРАЦИЙ
+// ВИДЖЕТ ИНТЕГРАЦИЙ С СЧЕТЧИКАМИ
 @Composable
-fun IntegrationsWidget(showTextIcon: Boolean) {
+fun IntegrationsWidget(integrations: List<com.example.compost2.domain.IntegrationType>) {
+    val counts = integrations.groupingBy { it }.eachCount()
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFF2F2F5)),
@@ -379,18 +361,58 @@ fun IntegrationsWidget(showTextIcon: Boolean) {
         ) {
             Text("LINKED:", style = MaterialTheme.typography.labelSmall, color = Color.Gray, fontSize = 10.sp, letterSpacing = 1.sp)
             Spacer(modifier = Modifier.width(12.dp))
-            if (showTextIcon) AppliedIntegrationBadge(Icons.Default.Description, Color.Black)
+
+            if (counts.isEmpty()) {
+                Text("None", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            } else {
+                counts.forEach { (type, count) ->
+                    Box(modifier = Modifier.padding(end = 8.dp)) {
+                        // ИСПРАВЛЕНО: Добавлена функция, которой не хватало
+                        AppliedIntegrationBadge(
+                            icon = getIconForType(type),
+                            color = Color.Black
+                        )
+                        if (count > 0) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .offset(x = 4.dp, y = 4.dp)
+                                    .background(AppPrimary, CircleShape)
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = count.toString(),
+                                    color = Color.White,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
 
+// ИСПРАВЛЕНО: Восстановлена функция для отрисовки значка интеграции
 @Composable
 fun AppliedIntegrationBadge(icon: ImageVector, color: Color) {
     Box(
-        modifier = Modifier.size(28.dp).background(color.copy(alpha = 0.1f), CircleShape),
+        modifier = Modifier
+            .size(28.dp)
+            .background(color.copy(alpha = 0.1f), CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, null, tint = color, modifier = Modifier.size(14.dp))
+    }
+}
+
+fun getIconForType(type: com.example.compost2.domain.IntegrationType): ImageVector {
+    return when(type) {
+        com.example.compost2.domain.IntegrationType.CALENDAR -> Icons.Default.DateRange
+        com.example.compost2.domain.IntegrationType.GMAIL -> Icons.Default.Email
+        else -> Icons.Default.Description
     }
 }
 

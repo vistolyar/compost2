@@ -2,34 +2,39 @@ package com.example.compost2.data.network
 
 import com.google.gson.annotations.SerializedName
 
-// --- НОВЫЕ МОДЕЛИ ДЛЯ S3 ---
+// --- SHARED / UTILS ---
 
-// Ответ на запрос "Куда грузить?"
+// Ответ на получение ссылки загрузки (GET /api/get_upload_url)
 data class UploadUrlResponse(
-    @SerializedName("upload_url") val uploadUrl: String, // Ссылка на S3 (PUT)
-    @SerializedName("file_key") val fileKey: String,     // ID файла для бэкенда
-    @SerializedName("expires_in") val expiresIn: Int? = 3600
+    @SerializedName("upload_url") val uploadUrl: String,
+    @SerializedName("file_key") val fileKey: String
 )
 
-// --- ОБНОВЛЕННЫЙ ЗАПРОС НА ПРОЦЕССИНГ ---
-data class ArticleRequest(
-    // Base64 делаем nullable (он теперь запасной вариант)
-    @SerializedName("audio_base64") val audioBase64: String? = null,
+// --- STAGE 1: TRANSCRIPTION ---
 
-    // НОВОЕ ПОЛЕ: Ключ файла в S3
-    @SerializedName("file_key") val fileKey: String? = null,
+// Запрос на транскрибацию (POST /api/transcribe)
+data class TranscribeRequest(
+    @SerializedName("file_key") val fileKey: String,
+    @SerializedName("openai_key") val openAiKey: String
+)
 
+// Ответ транскрибации
+data class TranscribeResponse(
+    @SerializedName("raw_text") val rawText: String
+)
+
+// --- STAGE 2: PROCESSING ---
+
+// Запрос на обработку текста (POST /api/process-text)
+data class ProcessTextRequest(
+    @SerializedName("raw_text") val rawText: String,
     @SerializedName("prompt") val prompt: String,
-    @SerializedName("openai_key") val openaiKey: String
+    @SerializedName("openai_key") val openAiKey: String
 )
 
-// Ответ от сервера (остается прежним, но добавим поля для надежности)
+// Ответ обработки (GPT результат)
+// Используется также для старого формата, если нужно, но по сути это результат Stage 2
 data class ArticleResponse(
-    @SerializedName("title") val title: String,
-    @SerializedName("content") val content: String,
-    @SerializedName("status") val status: String? = "success"
-)
-
-data class ErrorResponse(
-    @SerializedName("error") val error: String
+    val title: String,
+    val content: String
 )
