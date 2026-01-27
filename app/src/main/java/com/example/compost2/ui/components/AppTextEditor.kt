@@ -4,8 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.Icon
@@ -28,76 +30,20 @@ import com.example.compost2.ui.theme.MontserratFontFamily
 fun AppTextEditor(
     value: String,
     onValueChange: (String) -> Unit,
+    label: String,
     modifier: Modifier = Modifier,
     placeholder: String = "Start writing...",
-    showJsonTab: Boolean = false, // Показывать ли вторую вкладку
-    onCopy: () -> Unit // Действие копирования
+    onCopy: (() -> Unit)? = null
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .border(1.dp, AppInactive.copy(alpha = 0.3f), RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-            .background(Color.White)
-    ) {
-        // --- HEADER ---
+    Box(modifier = modifier) {
+        // Контейнер с рамкой
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.White)
-        ) {
-            // Вкладки
-            Row(
-                modifier = Modifier.padding(start = 25.dp, top = 15.dp, bottom = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
-            ) {
-                Text(
-                    text = "PROMPT TEXT",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = AppTextPrimary
-                )
-
-                if (showJsonTab) {
-                    Text(
-                        text = "JSON PREVIEW",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = AppTextPrimary.copy(alpha = 0.3f)
-                    )
-                }
-            }
-
-            // Тулбар (Только кнопка копирования справа)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0xFFF8F8FA))
-                    .border(width = 1.dp, color = AppInactive.copy(alpha = 0.2f))
-                    .padding(horizontal = 25.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End, // Всё вправо
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Кнопка копирования
-                Box(
-                    modifier = Modifier
-                        .clickable { onCopy() }
-                        .padding(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "Copy",
-                        tint = Color.Gray,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-        }
-
-        // --- TEXT AREA ---
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .padding(25.dp)
+                .fillMaxSize() // Заполняем переданный размер
+                .padding(top = 8.dp)
+                .border(1.dp, AppInactive, RoundedCornerShape(12.dp))
+                .background(Color.White, RoundedCornerShape(12.dp))
+                .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 24.dp) // Top padding для заголовка
         ) {
             if (value.isEmpty()) {
                 Text(
@@ -107,6 +53,7 @@ fun AppTextEditor(
                 )
             }
 
+            // Текстовое поле с ВНУТРЕННИМ скроллом
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
@@ -114,11 +61,42 @@ fun AppTextEditor(
                     fontFamily = MontserratFontFamily,
                     fontWeight = FontWeight.Normal,
                     fontSize = 16.sp,
-                    lineHeight = 26.sp,
+                    lineHeight = 24.sp,
                     color = AppTextPrimary
                 ),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()) // Скролл здесь!
             )
+        }
+
+        // ЗАГОЛОВОК (LABEL) - Фиксирован сверху
+        Text(
+            text = label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = AppInactive,
+            modifier = Modifier
+                .padding(start = 16.dp)
+                .background(Color.White)
+                .padding(horizontal = 4.dp)
+                .align(Alignment.TopStart)
+        )
+
+        // КНОПКА КОПИРОВАНИЯ - Фиксирована сверху
+        if (onCopy != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 16.dp, end = 12.dp)
+                    .clickable { onCopy() }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "Copy",
+                    tint = AppInactive,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }

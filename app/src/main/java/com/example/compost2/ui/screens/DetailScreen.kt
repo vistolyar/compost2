@@ -6,6 +6,7 @@ import android.content.Context
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -29,25 +30,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity // ВАЖНЫЙ ИМПОРТ
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp // ВАЖНЫЙ ИМПОРТ
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.compost2.domain.IntegrationType
 import com.example.compost2.domain.RecordingStatus
 import com.example.compost2.ui.components.ActionLensButton
 import com.example.compost2.ui.components.AppTextEditor
 import com.example.compost2.ui.components.PlayerWidget
 import com.example.compost2.ui.theme.*
-import kotlin.math.abs // ВАЖНЫЙ ИМПОРТ
+import kotlin.math.abs
 
 const val LOREM_IPSUM = """
 Lorem ipsum dolor sit amet...
@@ -66,7 +69,15 @@ fun DetailScreen(
         viewModel.loadItem(fileName)
     }
 
-    Box(modifier = Modifier.fillMaxSize().background(Color.White)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.White)
+            .enableSwipeNavigation(
+                onSwipeRight = onNavigateBack,
+                onSwipeLeft = { viewModel.onOpenLens() }
+            )
+    ) {
 
         // 1. ВЕРХНИЙ БАР
         Row(
@@ -84,7 +95,6 @@ fun DetailScreen(
             }
             Spacer(modifier = Modifier.width(8.dp))
 
-            // ИСПРАВЛЕНИЕ ЛОГИКИ ЗАГОЛОВКА
             val displayTitle = when {
                 viewModel.title.isNotBlank() -> viewModel.title
                 viewModel.rawText.isNotBlank() -> viewModel.rawText.take(150).replace("\n", " ") + "..."
@@ -102,12 +112,6 @@ fun DetailScreen(
             )
 
             Spacer(modifier = Modifier.width(8.dp))
-
-            if (viewModel.hasRawText) {
-                IconButton(onClick = { viewModel.restoreRawText() }) {
-                    Icon(Icons.Default.History, contentDescription = "Restore", tint = AppPrimary)
-                }
-            }
         }
 
         // 2. ОСНОВНОЙ СКРОЛЛ
@@ -115,18 +119,13 @@ fun DetailScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(top = 60.dp),
-            contentPadding = PaddingValues(bottom = 100.dp)
+            contentPadding = PaddingValues(bottom = 40.dp)
         ) {
 
-            // --- СЕКЦИЯ ПЛЕЕРА ---
+            // --- ПЛЕЕР ---
             item {
                 Box(
-                    modifier = Modifier
-                        .padding(horizontal = 25.dp, vertical = 10.dp)
-                        .enableSwipeNavigation(
-                            onSwipeRight = onNavigateBack,
-                            onSwipeLeft = { viewModel.onOpenLens() }
-                        )
+                    modifier = Modifier.padding(horizontal = 25.dp, vertical = 10.dp)
                 ) {
                     PlayerWidget(
                         fileName = viewModel.item?.name ?: "audio.m4a",
@@ -144,10 +143,11 @@ fun DetailScreen(
                 }
             }
 
-            // --- СЕКЦИЯ ИНТЕГРАЦИЙ (LINKED) ---
+            // --- ИНТЕГРАЦИИ (LINKED) ---
             item {
-                val hasEditableText = viewModel.content.isNotBlank()
-                if (hasEditableText) {
+                val showIntegrations = viewModel.item?.status != RecordingStatus.SAVED && viewModel.item?.status != RecordingStatus.PROCESSING
+
+                if (showIntegrations) {
                     Box(
                         modifier = Modifier.padding(horizontal = 25.dp, vertical = 4.dp)
                     ) {
@@ -159,45 +159,111 @@ fun DetailScreen(
                 }
             }
 
-            // --- ТЕКСТ (Используем AppTextEditor) ---
+            // --- STICKY HEADER (ШАПКА РЕДАКТОРА) ---
+            stickyHeader {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.White)
+                        .padding(horizontal = 25.dp)
+                ) {
+                    // Контейнер шапки (Минимальная высота, чтобы вместить кнопку)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp) // Небольшой отступ от блока выше
+                    ) {
+                        // 1. ВЕРХНЯЯ ЧАСТЬ РАМКИ
+                        // Рисуем рамку, но только для шапки
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(50.dp) // Высота, покрывающая кнопку и лейбл
+                                .background(Color.White, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                                .border(1.dp, AppInactive, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp))
+                        )
+
+                        // "Ластик" для нижней границы рамки шапки (соединение с телом)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(2.dp)
+                                .align(Alignment.BottomCenter)
+                                .background(Color.White)
+                        )
+
+                        // 2. ЗАГОЛОВОК "TEXT OUTPUT"
+                        Text(
+                            text = "TEXT OUTPUT",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AppInactive,
+                            modifier = Modifier
+                                .padding(start = 16.dp)
+                                .offset(y = (-6).dp) // Поднимаем на границу рамки
+                                .background(Color.White)
+                                .padding(horizontal = 4.dp)
+                                .align(Alignment.TopStart)
+                        )
+
+                        // 3. КНОПКА КОПИРОВАНИЯ (Внутри шапки, справа)
+                        Surface(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 8.dp, end = 12.dp) // Отступы внутри рамки
+                                .size(34.dp)
+                                .clickable { viewModel.copyToClipboard() },
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color.White,
+                            shadowElevation = 2.dp,
+                            border = BorderStroke(1.dp, Color(0xFFF0F0F2))
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy",
+                                    tint = AppTextPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // --- ТЕЛО ТЕКСТА ---
             item {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 25.dp)
+                        .background(Color.White)
                 ) {
-                    if (viewModel.content.isNotBlank()) {
-                        AppTextEditor(
-                            value = viewModel.content,
-                            onValueChange = { viewModel.updateContent(viewModel.title, it) },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 300.dp),
-                            placeholder = "Transcribed text will appear here...",
-                            showJsonTab = false,
-                            onCopy = { viewModel.copyToClipboard() }
-                        )
-                    } else {
-                        // Empty state
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp)
-                                .border(1.dp, Color(0xFFF0F0F2), RoundedCornerShape(20.dp)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("Ready to transcribe...", color = Color.LightGray)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(30.dp))
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Button(
-                            onClick = { viewModel.reTranscribe() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
-                            shape = RoundedCornerShape(50)
-                        ) {
-                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("RE-TRANSCRIBE", style = MaterialTheme.typography.labelSmall, color = Color.White)
+                    // Нижняя часть рамки (U-образная)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 400.dp)
+                            // Стыкуем с шапкой (сдвиг вверх на 1px, чтобы перекрыть ластик)
+                            .offset(y = (-1).dp)
+                            .border(1.dp, AppInactive, RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp))
+                            // Паддинг внутри: сверху 0 (или минимальный), чтобы текст начинался сразу под шапкой
+                            .padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 4.dp)
+                    ) {
+                        if (viewModel.content.isNotBlank()) {
+                            BasicTextField(
+                                value = viewModel.content,
+                                onValueChange = { viewModel.updateContent(viewModel.title, it) },
+                                textStyle = TextStyle(
+                                    fontFamily = MontserratFontFamily,
+                                    fontWeight = FontWeight.Normal,
+                                    fontSize = 16.sp,
+                                    lineHeight = 26.sp,
+                                    color = AppTextPrimary
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Text("Ready to transcribe...", color = AppInactive)
                         }
                     }
                 }
@@ -258,7 +324,6 @@ fun DetailScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // Кнопка Re-transcribe
                             Button(
                                 onClick = {
                                     viewModel.reTranscribe()
@@ -282,7 +347,6 @@ fun DetailScreen(
                                 }
                             }
 
-                            // Кнопка Cancel
                             TextButton(
                                 onClick = { viewModel.showRawTextModal = false },
                                 modifier = Modifier.weight(1f).height(56.dp)
@@ -300,7 +364,7 @@ fun DetailScreen(
             }
         }
 
-        // 4. ACTION LENS
+        // 4. LENS
         AnimatedVisibility(
             visible = viewModel.showLens,
             enter = slideInHorizontally { it } + fadeIn(),
@@ -314,7 +378,6 @@ fun DetailScreen(
                     .clickable { viewModel.showLens = false },
                 contentAlignment = Alignment.Center
             ) {
-                // Линза
                 Box(modifier = Modifier.size(360.dp), contentAlignment = Alignment.Center) {
                     ActionLensButton(
                         state = com.example.compost2.ui.screens.ActionState.SELECTION,
@@ -325,7 +388,6 @@ fun DetailScreen(
                     )
                 }
 
-                // Подсказки
                 Column(
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 60.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
@@ -355,10 +417,11 @@ fun DetailScreen(
     }
 }
 
-// ВИДЖЕТ ИНТЕГРАЦИЙ С СЧЕТЧИКАМИ
+// ВИДЖЕТ ИНТЕГРАЦИЙ
 @Composable
-fun IntegrationsWidget(integrations: List<com.example.compost2.domain.IntegrationType>) {
+fun IntegrationsWidget(integrations: List<IntegrationType>) {
     val counts = integrations.groupingBy { it }.eachCount()
+    val displayCounts = if (counts.isEmpty()) mapOf(IntegrationType.NONE to 1) else counts
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -373,30 +436,27 @@ fun IntegrationsWidget(integrations: List<com.example.compost2.domain.Integratio
             Text("LINKED:", style = MaterialTheme.typography.labelSmall, color = Color.Gray, fontSize = 10.sp, letterSpacing = 1.sp)
             Spacer(modifier = Modifier.width(12.dp))
 
-            if (counts.isEmpty()) {
-                Text("None", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-            } else {
-                counts.forEach { (type, count) ->
-                    Box(modifier = Modifier.padding(end = 8.dp)) {
-                        AppliedIntegrationBadge(
-                            icon = getIconForType(type),
-                            color = Color.Black
-                        )
-                        if (count > 0) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .offset(x = 4.dp, y = 4.dp)
-                                    .background(AppPrimary, CircleShape)
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = count.toString(),
-                                    color = Color.White,
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+            displayCounts.forEach { (type, count) ->
+                Box(modifier = Modifier.padding(end = 8.dp)) {
+                    AppliedIntegrationBadge(
+                        icon = getIconForType(type),
+                        color = Color.Black
+                    )
+
+                    if (count > 1 || (count > 0 && type != IntegrationType.NONE)) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .offset(x = 4.dp, y = 4.dp)
+                                .background(AppPrimary, CircleShape)
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = count.toString(),
+                                color = Color.White,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
@@ -417,10 +477,12 @@ fun AppliedIntegrationBadge(icon: ImageVector, color: Color) {
     }
 }
 
-fun getIconForType(type: com.example.compost2.domain.IntegrationType): ImageVector {
+fun getIconForType(type: IntegrationType): ImageVector {
     return when(type) {
-        com.example.compost2.domain.IntegrationType.CALENDAR -> Icons.Default.DateRange
-        com.example.compost2.domain.IntegrationType.GMAIL -> Icons.Default.Email
+        IntegrationType.CALENDAR -> Icons.Default.DateRange
+        IntegrationType.GMAIL -> Icons.Default.Email
+        IntegrationType.TASKS -> Icons.Default.CheckCircle
+        IntegrationType.WORDPRESS -> Icons.Default.Public
         else -> Icons.Default.Description
     }
 }

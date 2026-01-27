@@ -1,6 +1,5 @@
 package com.example.compost2.ui.screens
 
-// ... (импорты те же, что и раньше)
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -50,6 +49,7 @@ fun PromptEditScreen(
     val viewModel: PromptSettingsViewModel = viewModel(factory = PromptSettingsViewModel.provideFactory(context))
     val intViewModel: IntegrationsViewModel = viewModel(factory = IntegrationsViewModel.provideFactory(context))
 
+    // Исходные данные
     var initialTitle by remember { mutableStateOf("") }
     var initialContent by remember { mutableStateOf("") }
     var initialType by remember { mutableStateOf(IntegrationType.NONE) }
@@ -57,10 +57,12 @@ fun PromptEditScreen(
 
     var isNewPrompt by remember { mutableStateOf(true) }
 
+    // Текущие данные
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(IntegrationType.NONE) }
 
+    // Состояние фокуса заголовка и ручного изменения
     var isTitleFocused by remember { mutableStateOf(false) }
     var isTitleManuallyChanged by remember { mutableStateOf(false) }
 
@@ -69,6 +71,7 @@ fun PromptEditScreen(
 
     val isModified = title != initialTitle || content != initialContent || selectedType != initialType
 
+    // Загрузка
     LaunchedEffect(promptId) {
         if (promptId != null) {
             val existing = viewModel.getPromptById(promptId)
@@ -88,6 +91,7 @@ fun PromptEditScreen(
         }
     }
 
+    // ЛОГИКА АВТОЗАПОЛНЕНИЯ ТАЙТЛА
     LaunchedEffect(content) {
         if (!isTitleManuallyChanged || title.trim().isEmpty()) {
             val potentialTitle = content.take(20).replace("\n", " ").trim()
@@ -134,7 +138,6 @@ fun PromptEditScreen(
                 onBackClick = onNavigateBack,
                 actions = {
                     if (!isNewPrompt) {
-                        // ИСПРАВЛЕНИЕ: Кнопка Delete всегда активна и красная
                         TextButton(onClick = { showDeleteDialog = true }) {
                             Text(
                                 "Delete",
@@ -188,7 +191,6 @@ fun PromptEditScreen(
             }
         }
     ) { paddingValues ->
-        // ... (Контент экрана без изменений, как в прошлом ответе)
         Column(
             modifier = Modifier
                 .padding(paddingValues)
@@ -196,8 +198,10 @@ fun PromptEditScreen(
                 .padding(horizontal = 25.dp)
                 .verticalScroll(rememberScrollState())
         ) {
+
             Spacer(modifier = Modifier.height(10.dp))
 
+            // --- TITLE BLOCK ---
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -256,19 +260,25 @@ fun PromptEditScreen(
                             fontSize = 8.sp
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Box(modifier = Modifier.size(6.dp).background(statusColor, CircleShape))
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(statusColor, CircleShape)
+                        )
                     }
                 }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
+            // --- INTEGRATION CARD ---
             AppCard(onClick = { /* */ }) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
+                    // ЛЕВАЯ ЧАСТЬ
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
@@ -293,6 +303,7 @@ fun PromptEditScreen(
                         )
                     }
 
+                    // ПРАВАЯ ЧАСТЬ
                     Row(
                         modifier = Modifier
                             .clickable { showIntegrationDialog = true }
@@ -307,7 +318,12 @@ fun PromptEditScreen(
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text("Change", style = MaterialTheme.typography.labelSmall, color = AppPrimary, fontSize = 9.sp)
+                            Text(
+                                "Change",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AppPrimary,
+                                fontSize = 9.sp
+                            )
                         }
                     }
                 }
@@ -315,14 +331,15 @@ fun PromptEditScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            val showJson = selectedType != IntegrationType.NONE
-
+            // --- EDITOR ---
             AppTextEditor(
                 value = content,
                 onValueChange = { content = it },
-                modifier = Modifier.fillMaxWidth().height(300.dp),
+                label = "PROMPT TEXT", // ИСПРАВЛЕНО: Добавлен label, убран showJsonTab
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp),
                 placeholder = "Describe how AI should process the text...",
-                showJsonTab = showJson,
                 onCopy = {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     val clip = ClipData.newPlainText("Prompt Content", content)
@@ -334,8 +351,12 @@ fun PromptEditScreen(
         }
     }
 
+    // --- DIALOGS ---
     if (showIntegrationDialog) {
-        val activeIntegrations = IntegrationType.values().filter { intViewModel.enabledIntegrations[it] == true }
+        val activeIntegrations = IntegrationType.values().filter {
+            intViewModel.enabledIntegrations[it] == true
+        }
+
         AlertDialog(
             onDismissRequest = { showIntegrationDialog = false },
             title = { Text("Select Action", style = MaterialTheme.typography.titleMedium) },
@@ -343,7 +364,9 @@ fun PromptEditScreen(
                 Column {
                     LazyColumn(modifier = Modifier.weight(1f, fill = false).heightIn(max = 300.dp)) {
                         items(activeIntegrations) { type ->
-                            IntegrationOptionRow(getIntegrationTitle(type), type) { selectedType = it; showIntegrationDialog = false }
+                            IntegrationOptionRow(getIntegrationTitle(type), type) {
+                                selectedType = it; showIntegrationDialog = false
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(16.dp))
@@ -354,7 +377,10 @@ fun PromptEditScreen(
                         style = MaterialTheme.typography.labelMedium,
                         color = AppPrimary,
                         textDecoration = TextDecoration.Underline,
-                        modifier = Modifier.fillMaxWidth().clickable { showIntegrationDialog = false; onNavigateToIntegrations() },
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            showIntegrationDialog = false
+                            onNavigateToIntegrations()
+                        },
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
                 }
@@ -372,9 +398,14 @@ fun PromptEditScreen(
             text = { Text("This action cannot be undone.", style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.deletePrompt(promptId!!); onNavigateBack() },
+                    onClick = {
+                        viewModel.deletePrompt(promptId!!)
+                        onNavigateBack()
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = AppDanger)
-                ) { Text("Delete") }
+                ) {
+                    Text("Delete")
+                }
             },
             dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } },
             containerColor = AppWhite
@@ -386,7 +417,10 @@ fun PromptEditScreen(
 @Composable
 private fun IntegrationOptionRow(label: String, type: IntegrationType, onClick: (IntegrationType) -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable { onClick(type) }.padding(vertical = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick(type) }
+            .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         val (icon, color) = getIntegrationIconAndColor(type)
